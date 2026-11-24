@@ -5,3 +5,5 @@ test-results
 playwright-report
 coverage
 package-lock.json
+# Map files are written by the app (canonical form) and the fixtures are exact byte-level samples.
+*.map.md

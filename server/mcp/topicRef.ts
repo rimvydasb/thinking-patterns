@@ -1,4 +1,4 @@
-import {pathTo} from '../../app/mindmap/model/tree';
+import {findByName, findByPath, normalize, topicPath} from '../../app/mindmap/model/topicPath';
 import type {MindMapTree, NodeId} from '../../app/mindmap/model/types';
 import {MapError} from '../map/mapDocument';
 
@@ -24,36 +24,15 @@ export const TOPIC_ARGS: RefArgNames = {name: 'topicName', path: 'topicPath'};
 /** Thrown when a name or path matches more than one topic. The message asks the agent to choose a path. */
 export class AmbiguousTopicError extends MapError {}
 
-/** Comparison form of topic text: case and whitespace do not matter. */
-export function normalize(text: string): string {
-    return text.replace(/\s+/g, ' ').trim().toLowerCase();
-}
-
-/** Topic texts from the central topic to the topic. Agents use this form in `topicPath`. */
-export function topicPath(tree: MindMapTree, id: NodeId): string[] {
-    return pathTo(tree, id).map((p) => tree.nodes[p].text);
-}
-
 const showPath = (path: string[]) => JSON.stringify(path);
-
-function matchesPath(tree: MindMapTree, id: NodeId, path: string[]): boolean {
-    const full = pathTo(tree, id);
-    if (full.length < path.length) return false;
-    const tail = full.slice(full.length - path.length);
-    return tail.every((nid, i) => normalize(tree.nodes[nid].text) === normalize(path[i]));
-}
 
 function describe(ref: TopicRef, args: RefArgNames): string {
     return ref.path?.length ? `${args.path} ${showPath(ref.path)}` : `${args.name} "${ref.name}"`;
 }
 
 function candidates(tree: MindMapTree, ref: TopicRef, args: RefArgNames): NodeId[] {
-    const ids = Object.keys(tree.nodes);
-    if (ref.path?.length) return ids.filter((id) => matchesPath(tree, id, ref.path!));
-    if (ref.name !== undefined && ref.name.trim()) {
-        const want = normalize(ref.name);
-        return ids.filter((id) => normalize(tree.nodes[id].text) === want);
-    }
+    if (ref.path?.length) return findByPath(tree, ref.path);
+    if (ref.name !== undefined && ref.name.trim()) return findByName(tree, ref.name);
     throw new MapError(`Give "${args.name}" or "${args.path}".`);
 }
 

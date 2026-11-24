@@ -1,0 +1,63 @@
+{
+  "ok": true,
+  "outline": {
+    "text": "Plan",
+    "children": [
+      {
+        "text": "Product",
+        "children": [
+          {
+            "text": "Risks",
+            "note": "Scope creep."
+          }
+        ]
+      },
+      {
+        "text": "Marketing",
+        "children": [
+          {
+            "text": "Risks",
+            "note": "Low reach."
+          }
+        ]
+      },
+      {
+        "text": "Budget",
+        "note": "First note."
+      }
+    ]
+  },
+  "frontmatter": "mindmap: 1",
+  "extraSections": "",
+  "orphanNotes": [
+    {
+      "heading": "Risks",
+      "body": "Matches two topics."
+    },
+    {
+      "heading": "budget",
+      "body": "Second note for the same topic."
+    },
+    {
+      "heading": "Gone topic",
+      "body": "Deleted from the map."
+    }
+  ],
+  "diagnostics": [
+    {
+      "line": 16,
+      "severity": "warning",
+      "message": "Note \"Risks\" matches 2 topics. Use a path such as \"Parent > Topic\"."
+    },
+    {
+      "line": 32,
+      "severity": "warning",
+      "message": "Note \"budget\" names a topic that already has a note."
+    },
+    {
+      "line": 36,
+      "severity": "warning",
+      "message": "Note \"Gone topic\" matches no topic. Change its heading to the topic text."
+    }
+  ]
+}

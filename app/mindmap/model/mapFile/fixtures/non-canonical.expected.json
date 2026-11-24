@@ -1,0 +1,38 @@
+{
+  "ok": true,
+  "outline": {
+    "text": "Software Factory",
+    "note": "The description.",
+    "children": [
+      {
+        "text": "Loops",
+        "children": [
+          {
+            "text": "Forward Pressure"
+          },
+          {
+            "text": "Backward pressure"
+          }
+        ]
+      },
+      {
+        "text": "Quality",
+        "children": [
+          {
+            "text": "Performance"
+          },
+          {
+            "text": "Security"
+          }
+        ]
+      },
+      {
+        "text": "Lazy\ncontinuation"
+      }
+    ]
+  },
+  "frontmatter": "mindmap: 1",
+  "extraSections": "",
+  "orphanNotes": [],
+  "diagnostics": []
+}

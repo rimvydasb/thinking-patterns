@@ -15,12 +15,9 @@ export default defineConfig({
         trace: 'retain-on-failure',
     },
     projects: [{name: 'chromium', use: {...devices['Desktop Chrome']}}],
+    // The MCP/sync server is started by the tests that need it (e2e/server.ts), so they can restart it and give it
+    // a maps directory of their own.
     webServer: [
-        {
-            command: `PORT=${E2E_SERVER_PORT} LOG_LEVEL=warn npm run server:start`,
-            url: `http://127.0.0.1:${E2E_SERVER_PORT}/api/health`,
-            reuseExistingServer: !process.env.CI,
-        },
         {
             command: `SERVER_URL=http://127.0.0.1:${E2E_SERVER_PORT} npm run dev -- --port 5174 --strictPort`,
             url: 'http://localhost:5174',

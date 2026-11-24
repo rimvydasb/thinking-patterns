@@ -1,7 +1,9 @@
 import {applyOps, diffTrees, type MapOp} from '../model/ops';
 import type {MindMapTree} from '../model/types';
 import type {MindMapStore} from '../store/mindmapStore';
-import type {ClientMessage, ServerMessage} from './protocol';
+import {clearLastMapFile, loadLastMapFile, saveLastMapFile} from './lastMapFile';
+import {ApiError, createMapFilesApi} from './mapFilesApi';
+import {SYNC_PATH, type ClientMessage, type FileState, type ServerMessage} from './protocol';
 
 /** The part of the browser `WebSocket` the client uses (lets tests pass a fake). */
 export interface SyncSocket {
@@ -26,6 +28,15 @@ export interface SyncClientOptions {
     reconnectDelayMs?: number;
     maxReconnectDelayMs?: number;
     onStatus?: (status: SyncStatus) => void;
+    /**
+     * The open map file and its state. `null`: the server has no file open and the last file could not be reopened
+     * (show the picker).
+     */
+    onFile?: (file: FileState | null) => void;
+    /** Where the last opened file is remembered. Default: browser `localStorage` (lastMapFile.ts). */
+    lastMapFile?: {load(): string | null; save(path: string): void; clear(): void};
+    /** Opens a file on the server. Default: `POST /api/map/open` on the server of `url`. */
+    openFile?: (path: string) => Promise<unknown>;
 }
 
 export interface SyncClient {
@@ -35,6 +46,8 @@ export interface SyncClient {
     version(): number;
     /** Number of local edit batches the server has not confirmed yet. */
     pendingCount(): number;
+    /** Asks the server to write the map in memory to the file ("Write the app version to the file"). */
+    writeFile(): void;
     close(): void;
 }
 
@@ -60,6 +73,13 @@ export function connectSync(opts: SyncClientOptions): SyncClient {
     const createSocket = opts.createSocket ?? ((u: string) => new WebSocket(u) as unknown as SyncSocket);
     const baseDelay = opts.reconnectDelayMs ?? 500;
     const maxDelay = opts.maxReconnectDelayMs ?? 5000;
+    const lastFile = opts.lastMapFile ?? {load: loadLastMapFile, save: saveLastMapFile, clear: clearLastMapFile};
+    const openFile =
+        opts.openFile ??
+        ((path: string) => {
+            const http = url.replace(/^ws/, 'http').replace(new RegExp(`${SYNC_PATH}$`), '');
+            return createMapFilesApi(http).openFile(path);
+        });
 
     let socket: SyncSocket | null = null;
     let status: SyncStatus = 'connecting';
@@ -74,6 +94,8 @@ export function connectSync(opts: SyncClientOptions): SyncClient {
     /** The store tree that the ops sent so far describe. */
     let lastTree = store.getState().tree;
     let applying = false;
+    /** True between `hello` and the first answer: a `file: null` then means "reopen the last file". */
+    let awaitingFirstAnswer = false;
 
     const setStatus = (s: SyncStatus) => {
         if (status === s) return;
@@ -101,7 +123,34 @@ export function connectSync(opts: SyncClientOptions): SyncClient {
         lastTree = tree;
     };
 
+    const showFile = (file: FileState | null) => {
+        if (file) lastFile.save(file.path);
+        opts.onFile?.(file);
+    };
+
+    /** The server has no file open: reopen the stored one (D11). Its snapshot then reaches all clients. */
+    const reopenLastFile = () => {
+        const stored = lastFile.load();
+        if (!stored) return showFile(null);
+        openFile(stored).catch((err: unknown) => {
+            if (err instanceof ApiError && (err.status === 400 || err.status === 404)) lastFile.clear();
+            if (!closed) showFile(null);
+        });
+    };
+
+    const onFileMessage = (file: FileState | null) => {
+        const first = awaitingFirstAnswer;
+        awaitingFirstAnswer = false;
+        if (!file) {
+            confirmed = null;
+            version = 0;
+            if (first) return reopenLastFile();
+        }
+        showFile(file);
+    };
+
     const onSnapshot = (msg: Extract<ServerMessage, {type: 'snapshot'}>) => {
+        awaitingFirstAnswer = false;
         const previous = confirmed;
         pending = pending.filter((p) => p.seq > msg.lastSeq);
         confirmed = msg.tree;
@@ -110,6 +159,7 @@ export function connectSync(opts: SyncClientOptions): SyncClient {
         show(localView(), remoteOps);
         for (const p of pending) send({type: 'ops', seq: p.seq, ops: p.ops});
         send({type: 'selection', topicId: store.getState().selectedId});
+        showFile(msg.file);
     };
 
     const onPatch = (msg: Extract<ServerMessage, {type: 'patch'}>) => {
@@ -142,6 +192,9 @@ export function connectSync(opts: SyncClientOptions): SyncClient {
                 break;
             case 'patch':
                 onPatch(msg);
+                break;
+            case 'file':
+                onFileMessage(msg.file);
                 break;
             case 'focus':
                 store.getState().select(msg.topicId);
@@ -179,6 +232,7 @@ export function connectSync(opts: SyncClientOptions): SyncClient {
         ws.onopen = () => {
             delay = baseDelay;
             setStatus('online');
+            awaitingFirstAnswer = true;
             send({type: 'hello', clientId});
         };
         ws.onmessage = (ev) => onMessage(ev.data);
@@ -199,6 +253,7 @@ export function connectSync(opts: SyncClientOptions): SyncClient {
         status: () => status,
         version: () => version,
         pendingCount: () => pending.length,
+        writeFile: () => send({type: 'writeFile'}),
         close: () => {
             closed = true;
             if (timer) clearTimeout(timer);

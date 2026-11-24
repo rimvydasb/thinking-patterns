@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "outline": {
+    "text": "Build",
+    "children": [
+      {
+        "text": "Pipeline",
+        "note": "Steps of the pipeline.\n\n### Stages\n\n```yaml\n# Notes\n## Cache\nstages: [build, test]\n```\n\n~~~\n## Still code\n~~~\n\n    ## indented code, not a heading\n\nLast line."
+      },
+      {
+        "text": "Cache",
+        "note": "Two levels: local and remote."
+      }
+    ]
+  },
+  "frontmatter": "mindmap: 1",
+  "extraSections": "",
+  "orphanNotes": [],
+  "diagnostics": []
+}

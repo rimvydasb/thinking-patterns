@@ -9,7 +9,9 @@ User edits in the app reach the server at once, so agents always work on the cur
 - The server holds exactly one map: the map the user has open. Tools have no map argument.
 - Agents name topics by their text (`topicName`) or by their path (`topicPath`). Agents never see topic ids.
 - Agents connect to `POST /mcp` (MCP Streamable HTTP). The app connects to the WebSocket `/api/sync`.
-- Project persistence (Markdown files) is out of scope for this phase.
+- The server stores the open map in a `.map.md` file and writes every change back to it.
+- [map-file-lifecycle-story.md](map-file-lifecycle-story.md) defines the file format, the change detection and the file picker.
+- All map tools return the error "No map file is open. Ask the user to open one in the app." while no file is open.
 
 > Context: this is the MVP phase "MCP and ability for the app to push and update the state if agent changes it" of [mindmap-spec.md](mindmap-spec.md). The TypeScript server is a test bed for the tools and the sync protocol. A Tauri (Rust) back end can replace it later. That back end MUST implement the same MCP tools and the protocol in [protocol.ts](../app/mindmap/sync/protocol.ts).
 
@@ -161,7 +163,7 @@ topicName "Risks" is not unique: 2 topics have this text. Which one do you mean?
 
 All tools work on the open map. Every result is JSON text.
 
-Topics in results are paths (`string[]`) or nested `{text, collapsed?, children?}` objects, never ids.
+Topics in results are paths (`string[]`) or nested `{text, collapsed?, note?, children?}` objects, never ids.
 
 ### Read tools
 
@@ -170,20 +172,24 @@ Topics in results are paths (`string[]`) or nested `{text, collapsed?, children?
 | `get_topic` | `topicName` or `topicPath` | `path`, and the topic with all its subtopics |
 | `search_topics` | `query`, `regex?`, `limit?` (default 50) | `total`, and `matches` as paths |
 | `get_selection` | - | Path and subtopics of the topic selected in the app, or `null` |
+| `get_map_info` | - | `path`, `state`, `diagnostics`, `writtenAt`, `changedOnDiskAt` of the map file, or `{path: null}` while no file is open |
 
 ### Change tools
 
 | Tool | Arguments | Effect |
 | --- | --- | --- |
 | `add_topics` | `parentName`/`parentPath`?, `topics` or `markdown`, `index?` | Adds nested topics in one change. Default parent: the central topic. Unfolds the parent. |
-| `update_topic` | `topicName`/`topicPath`, `text?`, `collapsed?` | Changes text, folds or unfolds. |
+| `update_topic` | `topicName`/`topicPath`, `text?`, `collapsed?`, `note?` | Changes text or note, folds or unfolds. An empty `note` removes the note. |
 | `move_topic` | `topicName`/`topicPath`, `newParentName`/`newParentPath`, `index?` | Moves a subtree or reorders siblings. Refuses a move under its own subtree. |
 | `delete_topics` | `topics[]` | Deletes subtrees. Refuses the central topic. |
 | `group_topics` | `topics[]` (same parent), `text` | Adds a parent topic in place of the first topic and moves the topics under it. |
 | `replace_map` | `title?`, `topics` or `markdown` | Replaces all topics. |
 | `focus_topic` | `topicName`/`topicPath` | Unfolds the ancestors, then the open apps select the topic and scroll to it. |
 
-- `topics` is a nested array: `[{text, collapsed?, children?: [...]}]`.
+- `topics` is a nested array: `[{text, collapsed?, note?, children?: [...]}]`.
+- A change tool returns after the map file contains its change (`MapFileBinding.flush()`).
+- A change tool returns an error with the file diagnostics while the file is `invalid` or `missing`. Read tools still work.
+- The `get_map_info` description tells agents that they MAY edit the file directly; the open app shows the change.
 - `markdown` is a list: one `- Topic` per line, 2 spaces of indentation per level ([markdown.ts](../app/mindmap/model/markdown.ts)).
 - In `replace_map`, a Markdown list with one top-level item is the whole map. That item is the central topic.
 - Each change tool call is one atomic batch: one version step and one push to the apps.
@@ -204,7 +210,9 @@ The sync uses topic ids internally; the MCP tools translate names and paths to i
 | App to server | `hello` | `clientId` | Opens the connection |
 | App to server | `ops` | `seq`, `ops: MapOp[]` | One batch of local edits |
 | App to server | `selection` | `topicId` | The selected topic, for `get_selection` |
-| Server to app | `snapshot` | `version`, `tree`, `lastSeq` | Full state after `hello`. `lastSeq` = last applied batch of this client. |
+| App to server | `writeFile` | - | Writes the map in memory to the file in any file state |
+| Server to app | `snapshot` | `version`, `tree`, `lastSeq`, `file` | Full state after `hello`, and to all apps after another file opens. `lastSeq` = last applied batch of this client. |
+| Server to app | `file` | `file: FileState \| null` | The file state changed. `null` after `hello` while no file is open. |
 | Server to app | `patch` | `version`, `ops`, `origin?` | One applied batch. `origin` = `{clientId, seq}` for app batches. |
 | Server to app | `focus` | `topicId` | Select and show a topic |
 | Server to app | `error` | `message` | Invalid message or failed batch |
@@ -213,13 +221,14 @@ The sync uses topic ids internally; the MCP tools translate names and paths to i
 
 `MapOp` ([ops.ts](../app/mindmap/model/ops.ts)) is the unit of change for the app, the server and the tools.
 
-| Op             | Fields                            | Skipped when                                          |
-| -------------- | --------------------------------- | ----------------------------------------------------- |
-| `add`          | `id`, `parentId`, `index`, `text` | The id exists, or the parent does not exist           |
-| `remove`       | `id`                              | The topic does not exist, or it is the root           |
-| `move`         | `id`, `parentId`, `index`         | A topic is missing, the topic is the root, or a cycle |
-| `setText`      | `id`, `text`                      | The topic does not exist, or the text is equal        |
-| `setCollapsed` | `id`, `collapsed`                 | The topic does not exist, or the flag is equal        |
+| Op | Fields | Skipped when |
+| --- | --- | --- |
+| `add` | `id`, `parentId`, `index`, `text` | The id exists, or the parent does not exist |
+| `remove` | `id` | The topic does not exist, or it is the root |
+| `move` | `id`, `parentId`, `index` | A topic is missing, the topic is the root, or a cycle |
+| `setText` | `id`, `text` | The topic does not exist, or the text is equal |
+| `setCollapsed` | `id`, `collapsed` | The topic does not exist, or the flag is equal |
+| `setNote` | `id`, `note` | The topic does not exist, or the note is equal. An empty `note` removes the note. |
 
 - `index` is the position among the siblings after the op. The value is clamped to the valid range.
 - `applyOps` skips an op that does not fit and reports which ops took effect.
@@ -324,11 +333,11 @@ sequenceDiagram
 
 ### App modes
 
-| URL               | Mode                                                 |
-| ----------------- | ---------------------------------------------------- |
-| `/`               | Syncs with the server                                |
-| `/?sample=<name>` | Offline demo, in memory                              |
-| `/?offline`       | Offline, in memory. The e2e GUI tests use this mode. |
+| URL               | Mode                                                                    |
+| ----------------- | ----------------------------------------------------------------------- |
+| `/`               | Syncs with the server. Shows the map file picker while no file is open. |
+| `/?sample=<name>` | Offline demo, in memory                                                 |
+| `/?offline`       | Offline, in memory. The e2e GUI tests use this mode.                    |
 
 - A badge in the top-right corner shows `Live`, `Connecting…` or `Offline`.
 - Without a server the app works offline and retries the connection in the background.
@@ -341,8 +350,11 @@ sequenceDiagram
 | `MindMapTree` | Normalized tree: `rootId`, `nodes` by id | [types.ts](../app/mindmap/model/types.ts) |
 | `MapOp` | One change; the sync unit | [ops.ts](../app/mindmap/model/ops.ts) |
 | `ClientMessage`, `ServerMessage` | WebSocket messages | [protocol.ts](../app/mindmap/sync/protocol.ts) |
-| `MapDocument` | The open map: `tree`, `version`, `lastSeq`, `selection` | [mapDocument.ts](../server/map/mapDocument.ts) |
-| `TopicRef`, `AmbiguousTopicError` | Topic reference by name or path; the ambiguity question | [topicRef.ts](../server/mcp/topicRef.ts) |
+| `MapDocument` | The working copy of the open map: `tree`, `version`, `lastSeq`, `selection` | [mapDocument.ts](../server/map/mapDocument.ts) |
+| `MapFileBinding`, `FileState` | Connects the map file to the `MapDocument`; the file state | [mapFileBinding.ts](../server/map/mapFileBinding.ts), [protocol.ts](../app/mindmap/sync/protocol.ts) |
+| `MapWorkspace`, `DirListing` | The maps directory and the open file | [mapWorkspace.ts](../server/map/mapWorkspace.ts) |
+| `MapFileModel` | Parsed content of a `.map.md` file | [types.ts](../app/mindmap/model/mapFile/types.ts) |
+| `TopicRef`, `AmbiguousTopicError` | Topic reference by name or path; the ambiguity question | [topicRef.ts](../server/mcp/topicRef.ts), matching in [topicPath.ts](../app/mindmap/model/topicPath.ts) |
 | `TopicTree` | A topic with subtopics as tools return it | [tools.ts](../server/mcp/tools.ts) |
 | `mapOpSchema`, `topicInputSchema`, `clientMessageSchema` | Runtime validation (zod) | [schemas.ts](../server/map/schemas.ts) |
 
@@ -357,11 +369,11 @@ sequenceDiagram
 | [topicRef.test.ts](../server/mcp/__tests__/topicRef.test.ts) | Name and path resolution, the ambiguity question, similar-topic hints |
 | [tools.test.ts](../server/mcp/__tests__/tools.test.ts) | Every tool through an in-memory MCP client; no tool exposes an id |
 | [sync.test.ts](../server/sync/__tests__/sync.test.ts) | Real server: MCP over HTTP pushes to the store; two apps and an agent converge; reconnect |
-| [live-sync.spec.ts](../e2e/live-sync.spec.ts) | Browser: an MCP call appears on screen; `focus_topic` selects; a user edit reaches MCP |
+| [mapFileBinding.test.ts](../server/map/__tests__/mapFileBinding.test.ts) | Write-through, echo suppression, file changes, invalid and missing files |
+| [live-sync.spec.ts](../e2e/live-sync.spec.ts) | Browser: an MCP call appears on screen; `focus_topic` selects; a user edit reaches MCP; file edits, the picker, reopen after restart |
 
 ## Limitations
 
-- **No persistence:** the map exists only while the server runs. A restart resets it to an empty central topic, and the open app then shows the empty map.
 - **One map:** all apps that connect to the server show the same map.
 - **Same-text siblings:** two siblings with the same text have the same path. No reference can tell them apart; the agent gets the ambiguity question every time. The agent can rename one through the user, or delete both.
 - **No authentication:** any local process can call `/mcp` and `/api/sync`. The server binds to `127.0.0.1` for this reason.
@@ -370,8 +382,7 @@ sequenceDiagram
 
 ## Future Improvements
 
-- Persist the map as a Markdown list in a project file. `outlineToMarkdown` and `markdownToOutlines` are the base. The server then holds the map of the opened project file.
 - A sibling index in `topicPath` (for example `"Risks#2"`) to tell same-text siblings apart.
-- Topic notes, labels, markers and relationships (XMind features), with tools for them.
+- Labels, markers and relationships (XMind features), with tools for them.
 - An agent activity indicator in the app (which topics an agent changed last).
 - Replace the Node server with the Tauri Rust core, with the same tools and protocol.

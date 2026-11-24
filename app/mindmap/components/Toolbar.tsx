@@ -45,7 +45,7 @@ function ToolButton({
     );
 }
 
-export function Toolbar({onFit}: {onFit(): void}) {
+export function Toolbar({onFit, extra}: {onFit(): void; extra?: ReactNode}) {
     const store = useMindMapStoreApi();
     const layout = useMindMap((s) => s.layout);
     const canUndo = useMindMap((s) => s.past.length > 0);
@@ -111,6 +111,7 @@ export function Toolbar({onFit}: {onFit(): void}) {
                 />
                 <ToolButton label="Fit" title="Fit map to screen" testId="fit" onClick={onFit} />
             </div>
+            {extra}
         </Panel>
     );
 }

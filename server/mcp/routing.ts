@@ -1,18 +1,18 @@
 import {StreamableHTTPServerTransport} from '@modelcontextprotocol/sdk/server/streamableHttp.js';
 import type {FastifyInstance} from 'fastify';
-import type {MapDocument} from '../map/mapDocument';
+import type {MapWorkspace} from '../map/mapWorkspace';
 import {createMcpServer} from './tools';
 
 export const MCP_PATH = '/mcp';
 
 /**
  * MCP over Streamable HTTP in stateless mode: every POST gets a fresh `McpServer` and transport. All state lives in
- * the `MapDocument`, so no MCP session is needed. GET (server-initiated stream) and DELETE (session end) are not
+ * the `MapWorkspace` (the open map file), so no MCP session is needed. GET (server-initiated stream) and DELETE (session end) are not
  * supported in stateless mode and answer 405.
  */
-export async function mcpRoutes(app: FastifyInstance, opts: {doc: MapDocument}) {
+export async function mcpRoutes(app: FastifyInstance, opts: {workspace: MapWorkspace}) {
     app.post(MCP_PATH, async (req, reply) => {
-        const server = createMcpServer(opts.doc);
+        const server = createMcpServer(opts.workspace);
         const transport = new StreamableHTTPServerTransport({sessionIdGenerator: undefined, enableJsonResponse: true});
         reply.raw.on('close', () => {
             void transport.close();

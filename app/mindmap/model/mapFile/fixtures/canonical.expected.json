@@ -1,0 +1,47 @@
+{
+  "ok": true,
+  "outline": {
+    "text": "Software Factory",
+    "note": "The description of software factory.",
+    "children": [
+      {
+        "text": "Loops",
+        "children": [
+          {
+            "text": "Forward Pressure"
+          },
+          {
+            "text": "Backward pressure"
+          }
+        ]
+      },
+      {
+        "text": "Software Quality Attributes",
+        "children": [
+          {
+            "text": "Performance",
+            "note": "Measured with k6 in the nightly pipeline.",
+            "children": [
+              {
+                "text": "k6"
+              }
+            ]
+          },
+          {
+            "text": "**Security** and `secrets`"
+          },
+          {
+            "text": "- a dash topic"
+          }
+        ]
+      },
+      {
+        "text": "A topic with\ntwo lines"
+      }
+    ]
+  },
+  "frontmatter": "mindmap: 1\ntitle: Software Factory",
+  "extraSections": "# References\n\n- [k6](https://k6.io)",
+  "orphanNotes": [],
+  "diagnostics": []
+}

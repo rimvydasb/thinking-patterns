@@ -6,6 +6,8 @@ export interface MindNode {
     parentId: NodeId | null;
     children: NodeId[];
     collapsed?: boolean;
+    /** Free Markdown text about the topic (the `# Notes` section of the map file). Absent when empty. */
+    note?: string;
 }
 
 /** Normalized, immutable mind map. Every operation returns a new tree. */
@@ -18,6 +20,7 @@ export interface MindMapTree {
 export interface Outline {
     text: string;
     collapsed?: boolean;
+    note?: string;
     children?: Outline[];
 }
 

@@ -10,7 +10,7 @@ import {
     type EdgeTypes,
     type NodeTypes,
 } from '@xyflow/react';
-import {useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent} from 'react';
+import {useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode} from 'react';
 import {computeLayout, withProvisionalNodes, type LayoutResult} from '../layout/elkLayout';
 import {topicColors} from '../layout/theme';
 import {branchIndex, fromOutline, getNode, hiddenDescendantCount, sideOf} from '../model/tree';
@@ -42,6 +42,8 @@ export interface MindMapProps {
     /** Bring your own store, e.g. to drive the map from outside. */
     store?: MindMapStore;
     showToolbar?: boolean;
+    /** Extra controls at the end of the toolbar (the app puts the map file actions there). */
+    toolbarExtra?: ReactNode;
     showHelp?: boolean;
     autoFocus?: boolean;
     className?: string;
@@ -87,6 +89,7 @@ function useAutoLayout(): {result: LayoutResult | null; version: number} {
 
 function MindMapCanvas({
     showToolbar = true,
+    toolbarExtra,
     showHelp = true,
     autoFocus = true,
     className,
@@ -287,7 +290,10 @@ function MindMapCanvas({
                 <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#d9dce3" />
                 <Controls showInteractive={false} position="bottom-right" />
                 {showToolbar && (
-                    <Toolbar onFit={() => void flow.fitView({padding: 0.15, maxZoom: 1.1, duration: 200})} />
+                    <Toolbar
+                        onFit={() => void flow.fitView({padding: 0.15, maxZoom: 1.1, duration: 200})}
+                        extra={toolbarExtra}
+                    />
                 )}
                 {showHelp && <ShortcutHelp />}
             </ReactFlow>

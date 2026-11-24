@@ -7,10 +7,16 @@ body,
   overflow: hidden;
 }
 
-.app-sync {
+.app-status {
   position: fixed;
   top: 12px;
   right: 12px;
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.app-sync {
   padding: 3px 10px;
   border-radius: 999px;
   font:
@@ -27,4 +33,17 @@ body,
 }
 .app-sync--offline {
   background: #8a8f98;
+}
+
+.app-file {
+  padding: 3px 10px;
+  border-radius: 999px;
+  font:
+    12px/1.6 system-ui,
+    sans-serif;
+  color: #1d2433;
+  background: #eef0f3;
+}
+.app-file--writing {
+  background: #fdf0d5;
 }

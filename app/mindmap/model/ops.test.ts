@@ -15,7 +15,7 @@ const base = () =>
 /** Structural view used for equality: ids, texts, order, folding. */
 const shape = (t: MindMapTree, id: NodeId = t.rootId): unknown => {
     const n = t.nodes[id];
-    return [id, n.text, !!n.collapsed, n.children.map((c) => shape(t, c))];
+    return [id, n.text, !!n.collapsed, n.note ?? '', n.children.map((c) => shape(t, c))];
 };
 
 function consistent(t: MindMapTree) {
@@ -73,6 +73,13 @@ describe('applyOp', () => {
         ).toBe(false);
     });
 
+    it('sets and removes a note', () => {
+        const noted = applyOp(base(), {op: 'setNote', id: 'root.1', note: 'Some **Markdown**'});
+        expect(noted.nodes['root.1'].note).toBe('Some **Markdown**');
+        expect(applyOp(noted, {op: 'setNote', id: 'root.1', note: 'Some **Markdown**'})).toBe(noted);
+        expect('note' in applyOp(noted, {op: 'setNote', id: 'root.1', note: ''}).nodes['root.1']).toBe(false);
+    });
+
     it('reports which ops applied', () => {
         const r = applyOps(base(), [
             {op: 'remove', id: 'root.0'},
@@ -109,7 +116,11 @@ function rng(seed: number) {
 function randomEdit(t: MindMapTree, r: () => number): MindMapTree {
     const ids = Object.keys(t.nodes);
     const pick = () => ids[Math.floor(r() * ids.length)];
-    switch (Math.floor(r() * 7)) {
+    switch (Math.floor(r() * 8)) {
+        case 7: {
+            const id = pick();
+            return {...t, nodes: {...t.nodes, [id]: {...t.nodes[id], note: r() < 0.3 ? undefined : `n${r()}`}}};
+        }
         case 0:
             return T.addChild(t, pick(), {text: `t${Math.floor(r() * 1000)}`}).tree;
         case 1:
@@ -145,6 +156,21 @@ describe('diffTrees', () => {
             },
         };
         expect(shape(applyOps(from, diffTrees(from, to)).tree)).toEqual(shape(to));
+    });
+
+    it('emits setNote for note changes', () => {
+        const from = base();
+        const to = applyOp(from, {op: 'setNote', id: 'root.2', note: 'x'});
+        expect(diffTrees(from, to)).toEqual([{op: 'setNote', id: 'root.2', note: 'x'}]);
+        expect(diffTrees(to, from)).toEqual([{op: 'setNote', id: 'root.2', note: ''}]);
+    });
+
+    it('gives exactly one move when a topic leaves the middle of its siblings', () => {
+        const from = base();
+        const to = T.moveNode(from, 'root.0.0', 'root.2');
+        expect(diffTrees(from, to)).toEqual([{op: 'move', id: 'root.0.0', parentId: 'root.2', index: 1}]);
+        const out = T.moveNode(from, 'root.0', 'root.2', 0);
+        expect(diffTrees(from, out)).toEqual([{op: 'move', id: 'root.0', parentId: 'root.2', index: 0}]);
     });
 
     it('round-trips random edit sequences', () => {

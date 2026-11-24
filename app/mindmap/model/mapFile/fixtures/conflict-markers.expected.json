@@ -1,0 +1,20 @@
+{
+  "ok": false,
+  "diagnostics": [
+    {
+      "line": 8,
+      "severity": "error",
+      "message": "Git conflict marker. Resolve the merge conflict first."
+    },
+    {
+      "line": 10,
+      "severity": "error",
+      "message": "Git conflict marker. Resolve the merge conflict first."
+    },
+    {
+      "line": 12,
+      "severity": "error",
+      "message": "Git conflict marker. Resolve the merge conflict first."
+    }
+  ]
+}

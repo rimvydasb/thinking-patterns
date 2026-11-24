@@ -79,6 +79,8 @@ The main design decision is change detection by file stamp (modification time, s
 
 > Assumption: `fs.watch` on a macOS directory reports the rename that an atomic save (ours or an editor's) causes. If it does not, the 1000 ms poll still detects the change. Verify in the `MapFileBinding` integration test with the real file system.
 
+> Clarification: verified. The integration test in `server/map/__tests__/mapFileBinding.test.ts` turns the poll off and detects an atomic rename save on macOS through `fs.watch`.
+
 ### D6: The binding writes through after each change, with coalescing and atomic replace
 
 - **Decision:** after each `MapDocument` patch, the binding starts a write if none is running. Changes during a running write cause one more write after it. A write goes to a temp file in the same directory, then `rename()` replaces the target. MCP change tools wait until the write of their batch completes before they return.
@@ -116,6 +118,8 @@ The main design decision is change detection by file stamp (modification time, s
 > Source: test parse with `@tanstack/markdown@1.2.1`, and `dist/types.d.ts` of that version (no `position` field on any node). Project page: https://tanstack.com/markdown/latest
 
 > Assumption: `remark-parse` 11.0.0 (part of remark 15) and `remark-frontmatter` 5 are the current majors, and both are ESM-only. Verify with `npm view remark-parse version` and `npm view remark-frontmatter version` before the install.
+
+> Clarification: verified. `npm view` returned `remark-parse` 11.0.0 and `remark-frontmatter` 5.0.0. The parser also needs `unified` 11 (runtime) and `@types/mdast` (types only).
 
 > Clarification: CommonMark parses Git conflict markers (`<<<<<<<`, `=======`, `>>>>>>>`) as paragraph text or as a setext heading underline. `parseMapFile()` therefore checks the raw lines for these markers before it calls `remark-parse`.
 
@@ -323,6 +327,7 @@ flowchart TD
     open -->|400 or 404| clear["remove the key"]
     clear --> picker
 ```
+
 - `MapWorkspace` runs one `open()` at a time (a promise queue).
 
 ### File state lifecycle
@@ -642,111 +647,111 @@ Acceptance criteria:
 
 **Phase 1: format, parser and serializer**
 
-- [ ] Add `note?: string` to `MindNode` and `Outline`, and the `setNote` op to `applyOp`, `diffTrees` and `mapOpSchema`
-- [ ] Move the pure name and path matching (`normalize`, trailing-path match) from `topicRef.ts` to `app/mindmap/model/topicPath.ts`
-- [ ] Add `remark-parse` and `remark-frontmatter` (D9)
-- [ ] Implement `parseMapFile()` with position-based text copy and the conflict-marker check (D2, D9)
-- [ ] Implement `serializeMapFile()` (D2, D9)
-- [ ] Add fixtures:
+- [x] Add `note?: string` to `MindNode` and `Outline`, and the `setNote` op to `applyOp`, `diffTrees` and `mapOpSchema`
+- [x] Move the pure name and path matching (`normalize`, trailing-path match) from `topicRef.ts` to `app/mindmap/model/topicPath.ts`
+- [x] Add `remark-parse` and `remark-frontmatter` (D9)
+- [x] Implement `parseMapFile()` with position-based text copy and the conflict-marker check (D2, D9)
+- [x] Implement `serializeMapFile()` (D2, D9)
+- [x] Add fixtures:
   - canonical file
   - non-canonical file (`*` bullets, 4 spaces, CRLF)
   - notes with fenced code and `###` headings
   - orphan note and duplicate topic texts
   - Git conflict markers and a missing `# Map`
-- [ ] Rewrite [software-quality.map.md](examples/software-quality.map.md) in format v1
-- [ ] Add tests for the code of this phase
+- [x] Rewrite [software-quality.map.md](examples/software-quality.map.md) in format v1
+- [x] Add tests for the code of this phase
 
 Acceptance criteria:
 
-- [ ] `npm test` passes, including `mapFile/parse.test.ts` and `mapFile/serialize.test.ts`
-- [ ] For each fixture, `serializeMapFile(parseMapFile(x))` equals the expected canonical file, and a canonical file round-trips byte for byte
-- [ ] A fixture with conflict markers returns `ok: false` with the marker line in `diagnostics`
+- [x] `npm test` passes, including `mapFile/parse.test.ts` and `mapFile/serialize.test.ts`
+- [x] For each fixture, `serializeMapFile(parseMapFile(x))` equals the expected canonical file, and a canonical file round-trips byte for byte
+- [x] A fixture with conflict markers returns `ok: false` with the marker line in `diagnostics`
 
 **Phase 2: id reconciliation**
 
-- [ ] Implement `reconcileTrees()` with the steps in [Id reconciliation](#id-reconciliation) (D3)
-- [ ] Add tests for the code of this phase: rename, reorder, move to another parent, add, delete, duplicate texts, whole-file replace
+- [x] Implement `reconcileTrees()` with the steps in [Id reconciliation](#id-reconciliation) (D3)
+- [x] Add tests for the code of this phase: rename, reorder, move to another parent, add, delete, duplicate texts, whole-file replace
 
 Acceptance criteria:
 
-- [ ] `npm test` passes, including `mapFile/reconcile.test.ts`
-- [ ] A rename gives exactly one `setText` op, and a move gives exactly one `move` op
-- [ ] A randomized test: for random edits of a tree, `applyOps(previous, diffTrees(previous, reconcileTrees(previous, parsed)))` has the same content as `parsed`
+- [x] `npm test` passes, including `mapFile/reconcile.test.ts`
+- [x] A rename gives exactly one `setText` op, and a move gives exactly one `move` op
+- [x] A randomized test: for random edits of a tree, `applyOps(previous, diffTrees(previous, reconcileTrees(previous, parsed)))` has the same content as `parsed`
 
 **Phase 3: file binding**
 
-- [ ] Implement `FsPort` with `NodeFsPort` and `MemoryFsPort`, including `listDir()` and `realpath()`
-- [ ] Implement `openMapFile()`: load, and create a new file with `create: true` (D11)
-- [ ] Implement `MapFileBinding` writes: write-through with coalescing and atomic replace (D6, D8)
-- [ ] Implement `checkDisk()`, watch, poll and the state machine (D5, D7, D10)
-- [ ] Skip writes for batches that change only `collapsed` (D4)
-- [ ] Add tests for the code of this phase with `MemoryFsPort`, and one integration test with `NodeFsPort` in a temp directory
+- [x] Implement `FsPort` with `NodeFsPort` and `MemoryFsPort`, including `listDir()` and `realpath()`
+- [x] Implement `openMapFile()`: load, and create a new file with `create: true` (D11)
+- [x] Implement `MapFileBinding` writes: write-through with coalescing and atomic replace (D6, D8)
+- [x] Implement `checkDisk()`, watch, poll and the state machine (D5, D7, D10)
+- [x] Skip writes for batches that change only `collapsed` (D4)
+- [x] Add tests for the code of this phase with `MemoryFsPort`, and one integration test with `NodeFsPort` in a temp directory
 
 Acceptance criteria:
 
-- [ ] `npm test` passes, including `mapFileBinding.test.ts`
-- [ ] Own writes do not trigger an ingest (echo suppressed by hash)
-- [ ] A `touch` of the file (new `mtimeMs`, same content) changes nothing
-- [ ] An external change during an unwritten in-memory change keeps both changes in the file
-- [ ] An invalid file pauses writes, and a valid file resumes them with the in-memory changes kept
-- [ ] An external change of a hand-formatted file with no in-memory change does not write the file (D8)
-- [ ] The integration test detects an atomic rename save within 1500 ms (see Assumption in D5)
+- [x] `npm test` passes, including `mapFileBinding.test.ts`
+- [x] Own writes do not trigger an ingest (echo suppressed by hash)
+- [x] A `touch` of the file (new `mtimeMs`, same content) changes nothing
+- [x] An external change during an unwritten in-memory change keeps both changes in the file
+- [x] An invalid file pauses writes, and a valid file resumes them with the in-memory changes kept
+- [x] An external change of a hand-formatted file with no in-memory change does not write the file (D8)
+- [x] The integration test detects an atomic rename save within 1500 ms (see Assumption in D5)
 
 **Phase 4: server, protocol and MCP**
 
-- [ ] Implement `MapWorkspace`: `listDir()` with the filter, `open()` with the root and suffix checks and the switch, one `open()` at a time (D11)
-- [ ] `main.ts` creates the workspace for `MAPS_DIR`, opens `MAP_FILE` if set before `listen()`, and closes the workspace on `SIGINT` and `SIGTERM` (D11)
-- [ ] `buildServer()` takes the workspace. Add `GET /api/files` and `POST /api/map/open` with the errors in [The user picks and opens a map file](#the-user-picks-and-opens-a-map-file)
-- [ ] `syncRoutes` sends `file` in `snapshot` and on changes, sends `file: null` while no file is open, sends `snapshot` to all clients after an open, and handles `writeFile`
-- [ ] MCP change tools wait for `flush()` and return the diagnostics in `invalid` or `missing` (D6, D10). All map tools return the no-file error while no file is open
-- [ ] Add `note` to `get_topic` and `update_topic`. Add the `get_map_info` tool
-- [ ] Add tests for the code of this phase
+- [x] Implement `MapWorkspace`: `listDir()` with the filter, `open()` with the root and suffix checks and the switch, one `open()` at a time (D11)
+- [x] `main.ts` creates the workspace for `MAPS_DIR`, opens `MAP_FILE` if set before `listen()`, and closes the workspace on `SIGINT` and `SIGTERM` (D11)
+- [x] `buildServer()` takes the workspace. Add `GET /api/files` and `POST /api/map/open` with the errors in [The user picks and opens a map file](#the-user-picks-and-opens-a-map-file)
+- [x] `syncRoutes` sends `file` in `snapshot` and on changes, sends `file: null` while no file is open, sends `snapshot` to all clients after an open, and handles `writeFile`
+- [x] MCP change tools wait for `flush()` and return the diagnostics in `invalid` or `missing` (D6, D10). All map tools return the no-file error while no file is open
+- [x] Add `note` to `get_topic` and `update_topic`. Add the `get_map_info` tool
+- [x] Add tests for the code of this phase
 
 Acceptance criteria:
 
-- [ ] `npm test` passes, including `sync.test.ts` and `tools.test.ts` cases for file state and notes
-- [ ] After an `add_topics` call returns, the file contains the new topics
-- [ ] A test edits the file on disk, and a connected sync client receives the change as a `patch`
-- [ ] `POST /api/map/open` rejects a path outside `MAPS_DIR`, including a `..` path and a symlink that points outside
-- [ ] After an open, a connected sync client receives a `snapshot` with the new file and a new `rootId`
-- [ ] `GET /api/files` lists subdirectories and `*.map.md` files only, and hides `.git` and `node_modules`
+- [x] `npm test` passes, including `sync.test.ts` and `tools.test.ts` cases for file state and notes
+- [x] After an `add_topics` call returns, the file contains the new topics
+- [x] A test edits the file on disk, and a connected sync client receives the change as a `patch`
+- [x] `POST /api/map/open` rejects a path outside `MAPS_DIR`, including a `..` path and a symlink that points outside
+- [x] After an open, a connected sync client receives a `snapshot` with the new file and a new `rootId`
+- [x] `GET /api/files` lists subdirectories and `*.map.md` files only, and hides `.git` and `node_modules`
 
 **Phase 5: GUI**
 
-- [ ] `connectSync` passes `FileState` to the app. `App.tsx` shows "Saved" or "Saving…" next to the sync badge
-- [ ] Add `FileStatusBanner` for `invalid` and `missing`, with the diagnostics and the "Write the app version to the file" action
-- [ ] Add `MapFilePicker`: directory navigation with parent and breadcrumbs relative to the root, file list, "New map" name field, and the confirmation for `invalid` and `missing` (D11)
-- [ ] Add `lastMapFile.ts`. `connectSync` stores the path of each opened file, and reopens the stored path when the server has no open file (D11)
-- [ ] `App.tsx` shows the picker while no file is open. The toolbar gets an "Open…" button and shows the absolute path of the open file
-- [ ] Add tests for the code of this phase (syncClient test for the `file` message, Storybook stories for the banner and the picker)
+- [x] `connectSync` passes `FileState` to the app. `App.tsx` shows "Saved" or "Saving…" next to the sync badge
+- [x] Add `FileStatusBanner` for `invalid` and `missing`, with the diagnostics and the "Write the app version to the file" action
+- [x] Add `MapFilePicker`: directory navigation with parent and breadcrumbs relative to the root, file list, "New map" name field, and the confirmation for `invalid` and `missing` (D11)
+- [x] Add `lastMapFile.ts`. `connectSync` stores the path of each opened file, and reopens the stored path when the server has no open file (D11)
+- [x] `App.tsx` shows the picker while no file is open. The toolbar gets an "Open…" button and shows the absolute path of the open file
+- [x] Add tests for the code of this phase (syncClient test for the `file` message, Storybook stories for the banner and the picker)
 
 Acceptance criteria:
 
-- [ ] `npm test` passes, including the `file` message case in `syncClient` tests
-- [ ] `npm run test:storybook:ci` passes, including the `FileStatusBanner` and `MapFilePicker` stories
-- [ ] The picker cannot be dismissed while no file is open
-- [ ] A stored path that returns 404 clears the key and shows the picker
-- [ ] A stored path is not sent while the server has a file open
+- [x] `npm test` passes, including the `file` message case in `syncClient` tests
+- [x] `npm run test:storybook:ci` passes, including the `FileStatusBanner` and `MapFilePicker` stories
+- [x] The picker cannot be dismissed while no file is open
+- [x] A stored path that returns 404 clears the key and shows the picker
+- [x] A stored path is not sent while the server has a file open
 
 **Phase E2E:**
 
-- [ ] Add an E2E test: a file edit on disk appears in the open app
-- [ ] Add an E2E test: a GUI edit appears in the file
-- [ ] Add an E2E test: the user opens a map file from the picker, and the map shows its topics
-- [ ] Add an E2E test: after a server restart without `MAP_FILE`, a reload of the page reopens the last file
+- [x] Add an E2E test: a file edit on disk appears in the open app
+- [x] Add an E2E test: a GUI edit appears in the file
+- [x] Add an E2E test: the user opens a map file from the picker, and the map shows its topics
+- [x] Add an E2E test: after a server restart without `MAP_FILE`, a reload of the page reopens the last file
 
 Acceptance criteria:
 
-- [ ] `npm run test:e2e` passes, including the new cases in `e2e/live-sync.spec.ts`
+- [x] `npm run test:e2e` passes, including the new cases in `e2e/live-sync.spec.ts`
 
 **Phase X:**
 
-- [ ] Update [mcp-server-spec.md](mcp-server-spec.md) with the changes from `## Architecture Changes`
-- [ ] Move D1, D3, D5, D7, D9 and D12 to `docs/architecture-adr.md`
-- [ ] Review the implementation against this story and the project conventions
+- [x] Update [mcp-server-spec.md](mcp-server-spec.md) with the changes from `## Architecture Changes`
+- [x] Move D1, D3, D5, D7, D9 and D12 to `docs/architecture-adr.md`
+- [x] Review the implementation against this story and the project conventions
 
 Acceptance criteria:
 
-- [ ] Every command in `## Verification` passes
-- [ ] The application starts with the Start command and shows the example map
-- [ ] The application starts with the "Start with picker" command, shows the picker, and opens `software-quality.map.md` from it
+- [x] Every command in `## Verification` passes
+- [x] The application starts with the Start command and shows the example map
+- [x] The application starts with the "Start with picker" command, shows the picker, and opens `software-quality.map.md` from it

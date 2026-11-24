@@ -24,7 +24,14 @@ export function fromOutline(outline: Outline): MindMapTree {
     const nodes: Record<NodeId, MindNode> = {};
     const visit = (o: Outline, id: NodeId, parentId: NodeId | null) => {
         const children = (o.children ?? []).map((_, i) => `${id}.${i}`);
-        nodes[id] = {id, text: o.text, parentId, children, ...(o.collapsed ? {collapsed: true} : {})};
+        nodes[id] = {
+            id,
+            text: o.text,
+            parentId,
+            children,
+            ...(o.collapsed ? {collapsed: true} : {}),
+            ...(o.note ? {note: o.note} : {}),
+        };
         (o.children ?? []).forEach((c, i) => visit(c, children[i], id));
     };
     visit(outline, 'root', null);
@@ -35,6 +42,7 @@ export function toOutline(tree: MindMapTree, id: NodeId = tree.rootId): Outline 
     const n = tree.nodes[id];
     const out: Outline = {text: n.text};
     if (n.collapsed) out.collapsed = true;
+    if (n.note) out.note = n.note;
     if (n.children.length) out.children = n.children.map((c) => toOutline(tree, c));
     return out;
 }

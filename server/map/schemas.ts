@@ -12,6 +12,7 @@ export const mapOpSchema = z.discriminatedUnion('op', [
     z.object({op: z.literal('move'), id, parentId: id, index}),
     z.object({op: z.literal('setText'), id, text: z.string()}),
     z.object({op: z.literal('setCollapsed'), id, collapsed: z.boolean()}),
+    z.object({op: z.literal('setNote'), id, note: z.string()}),
 ]) satisfies z.ZodType<MapOp>;
 
 /** A nested topic as agents write it. */
@@ -19,6 +20,7 @@ export const topicInputSchema: z.ZodType<Outline> = z.lazy(() =>
     z.object({
         text: z.string().min(1).describe('Topic text. Use \\n for a line break.'),
         collapsed: z.boolean().optional().describe('Show the topic folded (its children hidden).'),
+        note: z.string().optional().describe('Markdown note of the topic.'),
         children: z.array(topicInputSchema).optional(),
     }),
 );
@@ -27,4 +29,5 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
     z.object({type: z.literal('hello'), clientId: id}),
     z.object({type: z.literal('ops'), seq: z.number().int().min(1), ops: z.array(mapOpSchema)}),
     z.object({type: z.literal('selection'), topicId: id}),
+    z.object({type: z.literal('writeFile')}),
 ]);

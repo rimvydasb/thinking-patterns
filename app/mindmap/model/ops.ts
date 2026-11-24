@@ -15,7 +15,9 @@ export type MapOp =
     /** Re-parents a topic. `index` is the topic's position among the new siblings after the move. */
     | {op: 'move'; id: NodeId; parentId: NodeId; index: number}
     | {op: 'setText'; id: NodeId; text: string}
-    | {op: 'setCollapsed'; id: NodeId; collapsed: boolean};
+    | {op: 'setCollapsed'; id: NodeId; collapsed: boolean}
+    /** Sets the note of a topic. An empty string removes the note. */
+    | {op: 'setNote'; id: NodeId; note: string};
 
 export type MapOpKind = MapOp['op'];
 
@@ -95,6 +97,12 @@ export function applyOp(tree: MindMapTree, op: MapOp): MindMapTree {
             const {collapsed: _drop, ...rest} = node;
             return {...tree, nodes: {...nodes, [op.id]: op.collapsed ? {...rest, collapsed: true} : rest}};
         }
+        case 'setNote': {
+            const node = nodes[op.id];
+            if (!node || (node.note ?? '') === op.note) return tree;
+            const {note: _drop, ...rest} = node;
+            return {...tree, nodes: {...nodes, [op.id]: op.note ? {...rest, note: op.note} : rest}};
+        }
     }
 }
 
@@ -121,7 +129,9 @@ export function applyOps(tree: MindMapTree, ops: readonly MapOp[]): ApplyResult 
  * Both trees MUST share the root id.
  *
  * Order: adds and moves in pre-order of `to` (so a parent is in its final place before its children arrive and a
- * move can never create a cycle), then text and collapse changes, then removals of what is left over.
+ * move can never create a cycle), then text, collapse and note changes, then removals of what is left over.
+ * A child is moved only when its order relative to the siblings that stay under the same parent changes, so a topic
+ * that leaves a parent causes exactly one `move` and no reordering of the siblings it leaves behind.
  */
 export function diffTrees(from: MindMapTree, to: MindMapTree): MapOp[] {
     if (from === to) return [];
@@ -134,16 +144,23 @@ export function diffTrees(from: MindMapTree, to: MindMapTree): MapOp[] {
     };
 
     const visit = (id: NodeId) => {
-        const target = to.nodes[id];
-        target.children.forEach((childId, index) => {
+        const wanted = to.nodes[id].children;
+        const stays = new Set(wanted);
+        wanted.forEach((childId, index) => {
+            const current = work.nodes[id].children;
+            const prev = index === 0 ? null : wanted[index - 1];
             const existing = work.nodes[childId];
-            if (!existing) {
-                push({op: 'add', id: childId, parentId: id, index, text: to.nodes[childId].text});
-            } else if (existing.parentId !== id || work.nodes[id].children[index] !== childId) {
-                push({op: 'move', id: childId, parentId: id, index});
+            if (!existing || existing.parentId !== id) {
+                const at = prev === null ? 0 : current.indexOf(prev) + 1;
+                if (!existing) push({op: 'add', id: childId, parentId: id, index: at, text: to.nodes[childId].text});
+                else push({op: 'move', id: childId, parentId: id, index: at});
+                return;
             }
+            if (current.filter((c) => stays.has(c))[index] === childId) return;
+            const without = current.filter((c) => c !== childId);
+            push({op: 'move', id: childId, parentId: id, index: prev === null ? 0 : without.indexOf(prev) + 1});
         });
-        target.children.forEach(visit);
+        wanted.forEach(visit);
     };
     visit(to.rootId);
 
@@ -152,6 +169,7 @@ export function diffTrees(from: MindMapTree, to: MindMapTree): MapOp[] {
         const b = to.nodes[id];
         if (a.text !== b.text) push({op: 'setText', id, text: b.text});
         if (!!a.collapsed !== !!b.collapsed) push({op: 'setCollapsed', id, collapsed: !!b.collapsed});
+        if ((a.note ?? '') !== (b.note ?? '')) push({op: 'setNote', id, note: b.note ?? ''});
     }
 
     for (const id of Object.keys(from.nodes)) {
@@ -173,6 +191,7 @@ export function outlineToOps(
         const id = makeId();
         if (top) ids.push(id);
         ops.push({op: 'add', id, parentId: parent, index: at, text: o.text});
+        if (o.note) ops.push({op: 'setNote', id, note: o.note});
         (o.children ?? []).forEach((c, i) => visit(c, id, i, false));
         if (o.collapsed && o.children?.length) ops.push({op: 'setCollapsed', id, collapsed: true});
     };

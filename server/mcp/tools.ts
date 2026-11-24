@@ -5,17 +5,12 @@ import {markdownToOutlines} from '../../app/mindmap/model/markdown';
 import {applyOps, diffTrees, outlineToOps, type MapOp} from '../../app/mindmap/model/ops';
 import {newId, pathTo} from '../../app/mindmap/model/tree';
 import type {MindMapTree, NodeId, Outline} from '../../app/mindmap/model/types';
+import {normalize, topicPath} from '../../app/mindmap/model/topicPath';
 import {MapError, type MapDocument} from '../map/mapDocument';
+import {writesPausedMessage, type MapFileBinding} from '../map/mapFileBinding';
+import type {MapWorkspace} from '../map/mapWorkspace';
 import {topicInputSchema} from '../map/schemas';
-import {
-    normalize,
-    resolveTopic,
-    resolveTopics,
-    TOPIC_ARGS,
-    topicPath,
-    type RefArgNames,
-    type TopicRef,
-} from './topicRef';
+import {resolveTopic, resolveTopics, TOPIC_ARGS, type RefArgNames, type TopicRef} from './topicRef';
 
 export const SERVER_INFO = {name: 'thinking-patterns', version: '0.1.0'};
 
@@ -23,12 +18,16 @@ const INSTRUCTIONS = `Thinking Patterns: edits the mind map the user has open. C
 Name a topic by its text ("topicName") while that text is unique. Otherwise use "topicPath": the topic texts from the
 central topic down to the topic, for example ["Central Topic", "Product", "Risks"].
 If a name matches several topics, the tool changes nothing and lists the paths to choose from.
-Use get_selection to find the topic the user means by "this topic".`;
+Use get_selection to find the topic the user means by "this topic".
+The map is stored in a Markdown file (see get_map_info). Change tools return after the file is written.`;
 
-/** A topic as tools return it: text and nested children. */
+export const NO_FILE_MESSAGE = 'No map file is open. Ask the user to open one in the app.';
+
+/** A topic as tools return it: text, note and nested children. */
 export interface TopicTree {
     text: string;
     collapsed?: true;
+    note?: string;
     children?: TopicTree[];
 }
 
@@ -36,6 +35,7 @@ function topicTree(tree: MindMapTree, id: NodeId): TopicTree {
     const n = tree.nodes[id];
     const v: TopicTree = {text: n.text};
     if (n.collapsed) v.collapsed = true;
+    if (n.note) v.note = n.note;
     if (n.children.length) v.children = n.children.map((c) => topicTree(tree, c));
     return v;
 }
@@ -64,9 +64,9 @@ function json(data: unknown): CallToolResult {
 }
 
 /** Wraps a tool body: returns its value as JSON text, and errors (including ambiguity questions) as tool errors. */
-function run(body: () => unknown): CallToolResult {
+async function run(body: () => unknown): Promise<CallToolResult> {
     try {
-        return json(body());
+        return json(await body());
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return {isError: true, content: [{type: 'text', text: message}]};
@@ -107,21 +107,67 @@ const READ = {readOnlyHint: true, openWorldHint: false} as const;
 const WRITE = {readOnlyHint: false, destructiveHint: false, openWorldHint: false} as const;
 const DESTRUCTIVE = {readOnlyHint: false, destructiveHint: true, openWorldHint: false} as const;
 
-/** Registers all mind map tools on `server`. */
-export function registerTools(server: McpServer, doc: MapDocument) {
+/**
+ * Registers all mind map tools on `server`. Every call works on the map file that is open at that moment
+ * (`workspace.current()`); the wrappers below set `doc` right before the synchronous tool body runs.
+ */
+export function registerTools(server: McpServer, workspace: MapWorkspace) {
+    let doc!: MapDocument;
+    const open = (): MapFileBinding => {
+        const binding = workspace.current();
+        if (!binding) throw new MapError(NO_FILE_MESSAGE);
+        doc = binding.doc;
+        return binding;
+    };
+    /** A tool that reads the map, or changes only the view (folding, focus). */
+    const read = (body: () => unknown) =>
+        run(() => {
+            open();
+            return body();
+        });
+    /** A tool that changes the map: refused while writes are paused, returns after the file is written (D6, D10). */
+    const change = (body: () => unknown) =>
+        run(async () => {
+            const binding = open();
+            const {state} = binding.fileState();
+            if (state === 'invalid' || state === 'missing')
+                throw new MapError(writesPausedMessage(binding.fileState()));
+            const result = body();
+            await binding.flush();
+            return result;
+        });
     const topic = (input: RefInput, args = TOPIC_ARGS) => resolveTopic(doc.tree, refOf(input, args), args);
     const path = (id: NodeId) => topicPath(doc.tree, id);
+
+    server.registerTool(
+        'get_map_info',
+        {
+            title: 'Get map info',
+            description:
+                'Returns the Markdown file that stores the open map: its absolute path, its state (clean, writing, ' +
+                'invalid, missing), parse errors and warnings, and the times of the last write and the last outside ' +
+                'change. You MAY edit this file directly with file tools; the open app shows the change. Returns ' +
+                '{"path": null} while no map file is open.',
+            inputSchema: {},
+            annotations: READ,
+        },
+        () =>
+            run(() => {
+                const binding = workspace.current();
+                return binding ? binding.fileState() : {path: null};
+            }),
+    );
 
     server.registerTool(
         'get_topic',
         {
             title: 'Get topic',
-            description: 'Returns one topic with its path from the central topic and all its subtopics.',
+            description: 'Returns one topic with its path from the central topic, its note, and all its subtopics.',
             inputSchema: refArgs(TOPIC_ARGS, 'the topic'),
             annotations: READ,
         },
         (input) =>
-            run(() => {
+            read(() => {
                 const id = topic(input);
                 return {path: path(id), topic: topicTree(doc.tree, id)};
             }),
@@ -142,7 +188,7 @@ export function registerTools(server: McpServer, doc: MapDocument) {
             annotations: READ,
         },
         (args) =>
-            run(() => {
+            read(() => {
                 let test: (s: string) => boolean;
                 if (args.regex) {
                     let re: RegExp;
@@ -170,7 +216,7 @@ export function registerTools(server: McpServer, doc: MapDocument) {
             annotations: READ,
         },
         () =>
-            run(() => {
+            read(() => {
                 const s = doc.selection;
                 if (!s || !doc.tree.nodes[s.topicId]) return {selection: null};
                 return {selection: {path: path(s.topicId), topic: topicTree(doc.tree, s.topicId), selectedAt: s.at}};
@@ -193,7 +239,7 @@ export function registerTools(server: McpServer, doc: MapDocument) {
             annotations: WRITE,
         },
         (input) =>
-            run(() => {
+            change(() => {
                 const ref = refOf(input, PARENT_ARGS);
                 const parentId = ref.name || ref.path ? topic(input, PARENT_ARGS) : doc.tree.rootId;
                 const parent = doc.tree.nodes[parentId];
@@ -218,19 +264,23 @@ export function registerTools(server: McpServer, doc: MapDocument) {
         'update_topic',
         {
             title: 'Update topic',
-            description: 'Changes the text of a topic, folds it or unfolds it.',
+            description: 'Changes the text or the note of a topic, folds it or unfolds it.',
             inputSchema: {
                 ...refArgs(TOPIC_ARGS, 'the topic'),
                 text: z.string().min(1).optional().describe('New text.'),
                 collapsed: z.boolean().optional().describe('true folds the topic (hides its subtopics).'),
+                note: z
+                    .string()
+                    .optional()
+                    .describe('New Markdown note of the topic. An empty string removes the note.'),
             },
             annotations: WRITE,
         },
         (input) =>
-            run(() => {
+            change(() => {
                 const id = topic(input);
-                if (input.text === undefined && input.collapsed === undefined) {
-                    throw new MapError('Give "text" or "collapsed".');
+                if (input.text === undefined && input.collapsed === undefined && input.note === undefined) {
+                    throw new MapError('Give "text", "collapsed" or "note".');
                 }
                 if (input.collapsed && !doc.tree.nodes[id].children.length) {
                     throw new MapError('A topic without subtopics cannot fold.');
@@ -238,8 +288,10 @@ export function registerTools(server: McpServer, doc: MapDocument) {
                 const ops: MapOp[] = [];
                 if (input.text !== undefined) ops.push({op: 'setText', id, text: input.text});
                 if (input.collapsed !== undefined) ops.push({op: 'setCollapsed', id, collapsed: input.collapsed});
+                if (input.note !== undefined) ops.push({op: 'setNote', id, note: input.note.trim()});
                 doc.apply(ops);
-                return {path: path(id), collapsed: !!doc.tree.nodes[id].collapsed};
+                const n = doc.tree.nodes[id];
+                return {path: path(id), collapsed: !!n.collapsed, ...(n.note ? {note: n.note} : {})};
             }),
     );
 
@@ -256,7 +308,7 @@ export function registerTools(server: McpServer, doc: MapDocument) {
             annotations: WRITE,
         },
         (input) =>
-            run(() => {
+            change(() => {
                 const id = topic(input);
                 const parentId = topic(input, NEW_PARENT_ARGS);
                 if (id === doc.tree.rootId) throw new MapError('The central topic cannot move.');
@@ -279,7 +331,7 @@ export function registerTools(server: McpServer, doc: MapDocument) {
             annotations: DESTRUCTIVE,
         },
         (input) =>
-            run(() => {
+            change(() => {
                 const ids = resolveTopics(
                     doc.tree,
                     input.topics.map((t) => refOf(t, TOPIC_ARGS)),
@@ -306,7 +358,7 @@ export function registerTools(server: McpServer, doc: MapDocument) {
             annotations: WRITE,
         },
         (input) =>
-            run(() => {
+            change(() => {
                 const ids = resolveTopics(
                     doc.tree,
                     input.topics.map((t) => refOf(t, TOPIC_ARGS)),
@@ -341,7 +393,7 @@ export function registerTools(server: McpServer, doc: MapDocument) {
             annotations: DESTRUCTIVE,
         },
         (input) =>
-            run(() => {
+            change(() => {
                 let topics = readTopics(input);
                 let title = input.title;
                 if (input.markdown !== undefined && topics.length === 1) {
@@ -368,7 +420,7 @@ export function registerTools(server: McpServer, doc: MapDocument) {
             annotations: WRITE,
         },
         (input) =>
-            run(() => {
+            read(() => {
                 const id = topic(input);
                 const ops: MapOp[] = pathTo(doc.tree, id)
                     .slice(0, -1)
@@ -382,8 +434,8 @@ export function registerTools(server: McpServer, doc: MapDocument) {
 }
 
 /** A new MCP server with all tools. One instance serves one transport (see routing.ts). */
-export function createMcpServer(doc: MapDocument): McpServer {
+export function createMcpServer(workspace: MapWorkspace): McpServer {
     const server = new McpServer(SERVER_INFO, {instructions: INSTRUCTIONS});
-    registerTools(server, doc);
+    registerTools(server, workspace);
     return server;
 }

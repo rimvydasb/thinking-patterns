@@ -1,5 +1,5 @@
 ---
-mindmap: true
+mindmap: 1
 ---
 
 # Map
@@ -21,8 +21,8 @@ mindmap: true
   - Formal Verification For Each software attribute
   - Events
 
----
+# Notes
 
-# Software Factory
+## Software Factory
 
 The description of software factory that will be shown in description block when implemented

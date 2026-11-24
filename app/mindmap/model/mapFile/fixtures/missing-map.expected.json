@@ -1,0 +1,10 @@
+{
+  "ok": false,
+  "diagnostics": [
+    {
+      "line": 1,
+      "severity": "error",
+      "message": "The file must have exactly one \"# Map\" section."
+    }
+  ]
+}

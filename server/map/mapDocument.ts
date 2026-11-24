@@ -26,8 +26,9 @@ export interface ApplyOutcome {
 }
 
 /**
- * The one map the user has open. It lives in memory and is the single source of truth while the server runs;
- * persistence comes later.
+ * The working copy of the map the user has open. `MapFileBinding` loads it from the map file and writes every change
+ * back (the file is the durable truth). All writers (sync clients, MCP tools, file changes) change it through
+ * `apply()`.
  */
 export class MapDocument {
     tree: MindMapTree;

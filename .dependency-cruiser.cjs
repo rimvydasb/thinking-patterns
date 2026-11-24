@@ -94,7 +94,7 @@ module.exports = {
       severity: 'error',
       // Server tests may drive the real app sync client and store end to end.
       from: {path: '^server/', pathNot: '/__tests__/'},
-      to: {path: '^app/', pathNot: '^app/mindmap/(model/[^/]+\\.ts|sync/protocol\\.ts)$'},
+      to: {path: '^app/', pathNot: '^app/mindmap/(model/.+\\.ts|sync/protocol\\.ts)$'},
     },
   ],
   options: {
