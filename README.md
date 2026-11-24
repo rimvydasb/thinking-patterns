@@ -24,13 +24,13 @@ Tools: `get_topic`, `search_topics`, `get_selection`, `add_topics`, `update_topi
 
 ## Test
 
-| Command                     | What                                                                   |
-| --------------------------- | ---------------------------------------------------------------------- |
-| `npm test`                  | Jest: model, ops/diff, layout, store, server map, MCP tools, live sync |
-| `npm run test:e2e`          | Playwright GUI tests (starts the server and Vite itself)               |
-| `npm run test:storybook`    | Story play functions against a running `npm run storybook`             |
-| `npm run test:storybook:ci` | Builds Storybook, serves it and runs the play functions                |
-| `npm run test:all`          | Typecheck + all of the above                                           |
+| Command                     | What                                                                     |
+| --------------------------- | ------------------------------------------------------------------------ |
+| `npm test`                  | Vitest: model, ops/diff, layout, store, server map, MCP tools, live sync |
+| `npm run test:e2e`          | Playwright GUI tests (starts the server and Vite itself)                 |
+| `npm run test:storybook`    | Vitest: story play functions in headless Chromium (no server needed)     |
+| `npm run test:storybook:ci` | Same as `test:storybook` (kept for CI)                                   |
+| `npm run test:all`          | Typecheck + all of the above                                             |
 
 ## Shortcuts (XMind-style)
 

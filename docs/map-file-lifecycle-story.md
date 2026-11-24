@@ -474,19 +474,19 @@ declare function openMapFile(path: string, opts?: {fs?: FsPort; pollMs?: number}
 
 **Phase 0: Vitest replaces Jest (D12)**
 
-- [ ] Ensure the project compiles and existing tests are passing
-- [ ] Add `vitest` and `vitest.config.ts` with a `unit` project (`app/**/*.test.ts`, `server/**/*.test.ts`, Node environment)
-- [ ] Add `@storybook/addon-vitest` and a `storybook` Vitest project for the stories (browser mode with Playwright)
-- [ ] Replace the Jest globals in the existing tests. Change `tsconfig.json` `types` from `jest` to `vitest/globals`, or import from `vitest`
-- [ ] Change the scripts `test`, `test:storybook` and `test:storybook:ci` to Vitest. Keep the script names
-- [ ] Remove `jest`, `ts-jest`, `@types/jest`, `@storybook/test-runner`, and `jest.config.cjs`
+- [x] Ensure the project compiles and existing tests are passing
+- [x] Add `vitest` and `vitest.config.ts` with a `unit` project (`app/**/*.test.ts`, `server/**/*.test.ts`, Node environment)
+- [x] Add `@storybook/addon-vitest` and a `storybook` Vitest project for the stories (browser mode with Playwright)
+- [x] Replace the Jest globals in the existing tests. Change `tsconfig.json` `types` from `jest` to `vitest/globals`, or import from `vitest`
+- [x] Change the scripts `test`, `test:storybook` and `test:storybook:ci` to Vitest. Keep the script names
+- [x] Remove `jest`, `ts-jest`, `@types/jest`, `@storybook/test-runner`, and `jest.config.cjs`
 
 Acceptance criteria:
 
-- [ ] `npm test` runs Vitest and passes with the same number of tests as Jest before the change
-- [ ] `npm run test:storybook:ci` runs the story play tests through Vitest and passes
-- [ ] `grep -rn "jest" package.json tsconfig.json vitest.config.ts .claude` finds nothing
-- [ ] `npm run depcruise` passes
+- [x] `npm test` runs Vitest and passes with the same number of tests as Jest before the change
+- [x] `npm run test:storybook:ci` runs the story play tests through Vitest and passes
+- [x] `grep -rn "jest" package.json tsconfig.json vitest.config.ts .claude` finds nothing
+- [x] `npm run depcruise` passes
 
 **Phase 1: format, parser and serializer**
 
