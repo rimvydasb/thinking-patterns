@@ -1,0 +1,165 @@
+.mm-root {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  background: #fbfbfd;
+  outline: none;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+/* ---- Topics -------------------------------------------------------------- */
+
+.mm-topic {
+  position: relative;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  cursor: default;
+  user-select: none;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  transition: box-shadow 120ms ease;
+}
+
+.mm-topic__text {
+  display: block;
+  width: 100%;
+}
+
+.mm-topic.is-selected {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2f80ed;
+}
+
+.mm-topic.is-editing {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2f80ed, 0 6px 18px rgba(0, 0, 0, 0.15);
+  z-index: 10;
+}
+
+.mm-topic__editor {
+  display: block;
+  box-sizing: content-box;
+  field-sizing: content;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  white-space: pre-wrap;
+}
+
+.mm-topic__badge {
+  position: absolute;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border: 1.5px solid;
+  border-radius: 9px;
+  background: #fff;
+  font: 600 10px/15px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  cursor: pointer;
+}
+
+/* Handles are only anchor points for edges. */
+.mm-topic .react-flow__handle {
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+  min-width: 0;
+  min-height: 0;
+  border: 0;
+  pointer-events: none;
+}
+
+.react-flow__node-topic {
+  cursor: default;
+}
+
+/* ---- Toolbar ------------------------------------------------------------- */
+
+.mm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mm-group {
+  display: flex;
+  background: #fff;
+  border: 1px solid #e3e5ea;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
+  overflow: hidden;
+}
+
+.mm-btn {
+  border: 0;
+  background: #fff;
+  padding: 6px 10px;
+  font: 500 13px/1.2 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #1d2433;
+  cursor: pointer;
+}
+
+.mm-group .mm-btn + .mm-btn {
+  border-left: 1px solid #eef0f3;
+}
+
+.mm-btn:hover:not(:disabled) {
+  background: #f3f5f9;
+}
+
+.mm-btn[aria-pressed='true'] {
+  background: #0b1660;
+  color: #fff;
+}
+
+.mm-btn:disabled {
+  color: #b5bac5;
+  cursor: default;
+}
+
+.mm-help {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.mm-help > .mm-btn {
+  border: 1px solid #e3e5ea;
+  border-radius: 8px;
+}
+
+.mm-help__list {
+  margin: 0;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e3e5ea;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(16, 24, 40, 0.08);
+  font: 12px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #1d2433;
+}
+
+.mm-help__list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 2px 0;
+}
+
+.mm-help__list dd {
+  margin: 0;
+  color: #5b6475;
+}
+
+.mm-help__list kbd {
+  font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+  background: #f3f5f9;
+  border: 1px solid #e3e5ea;
+  border-radius: 4px;
+  padding: 0 4px;
+}

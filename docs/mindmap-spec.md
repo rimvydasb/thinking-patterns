@@ -17,15 +17,15 @@ In the very first iteration we will create mindmap app where I can create MindAp
 
 ### Testing
 
-- [ ] Storybook uses play unit tests
-- [ ] Playwright tests only stand-alone app
-- [ ] Jest unit tests for utilities and functions
+- [x] Storybook uses play unit tests
+- [x] Playwright tests only stand-alone app
+- [x] Jest unit tests for utilities and functions
 
 ## Features
 
-- [ ] Autoalignment
-- [ ] Standard mindmap node management features
-- [ ] Good shortcuts: with Tab I can create sub node, with enter I can create sibling node (get inspiration from XMind)
+- [x] Autoalignment
+- [x] Standard mindmap node management features
+- [x] Good shortcuts: with Tab I can create sub node, with enter I can create sibling node (get inspiration from XMind)
 
 ## Next Phases After MVP
 

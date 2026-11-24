@@ -1,0 +1,44 @@
+{
+  "name": "thinking-patterns",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "test": "jest",
+    "test:e2e": "playwright test",
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build",
+    "test:storybook": "test-storybook --url http://127.0.0.1:6006",
+    "test:storybook:ci": "storybook build --quiet && concurrently -k -s first -n SB,TEST \"http-server storybook-static -p 6007 --silent\" \"wait-on tcp:127.0.0.1:6007 && test-storybook --url http://127.0.0.1:6007\"",
+    "test:all": "npm run typecheck && npm test && npm run test:e2e && npm run test:storybook:ci"
+  },
+  "dependencies": {
+    "@xyflow/react": "^13.0.3",
+    "elkjs": "^0.12.1",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "zustand": "^5.1.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@storybook/react-vite": "^10.6.8",
+    "@storybook/test-runner": "^0.26.1",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "concurrently": "^10.0.7",
+    "http-server": "^14.1.1",
+    "jest": "^30.5.2",
+    "storybook": "^10.6.8",
+    "ts-jest": "^29.4.15",
+    "typescript": "~5.9",
+    "vite": "^8.3.8",
+    "wait-on": "^9.5.1"
+  }
+}
