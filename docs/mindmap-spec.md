@@ -30,6 +30,6 @@ In the very first iteration we will create mindmap app where I can create MindAp
 ## Next Phases After MVP
 
 - [ ] MCP and ability for the app to push and update the state if agent changes it
-- [ ] Tauri App for macOS
+- [ ] Rust core + Tauri App for macOS
 - [ ] mindmap is persisted and loaded from Markdown, that means all mindmap structure will be hierarchical and described as lists.
 - [ ] Future iOS support
