@@ -1,265 +1,269 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import {expect, test, type Locator, type Page} from '@playwright/test';
 
 const MOD = 'ControlOrMeta';
 
 const topics = (page: Page) => page.getByTestId('topic');
 const topic = (page: Page, text: string) =>
-  page.getByTestId('topic').filter({ has: page.getByTestId('topic-text').getByText(text, { exact: true }) });
+    page.getByTestId('topic').filter({has: page.getByTestId('topic-text').getByText(text, {exact: true})});
 const selected = (page: Page) => page.locator('[data-testid="topic"][aria-selected="true"]');
 const editor = (page: Page) => page.getByTestId('topic-editor');
 
 async function box(l: Locator) {
-  const b = await l.boundingBox();
-  if (!b) throw new Error('element has no box');
-  return { ...b, cx: b.x + b.width / 2, cy: b.y + b.height / 2 };
+    const b = await l.boundingBox();
+    if (!b) throw new Error('element has no box');
+    return {...b, cx: b.x + b.width / 2, cy: b.y + b.height / 2};
 }
 
 async function open(page: Page, query = '') {
-  await page.goto(`/${query}`);
-  await expect(topics(page).first()).toBeVisible();
-  await expect(page.getByTestId('mindmap')).toBeFocused();
+    await page.goto(`/${query}`);
+    await expect(topics(page).first()).toBeVisible();
+    await expect(page.getByTestId('mindmap')).toBeFocused();
 }
 
 /** Types text into the active editor and commits it with Enter. */
 async function typeAndCommit(page: Page, text: string) {
-  await expect(editor(page)).toBeFocused();
-  await page.keyboard.press(`${MOD}+a`);
-  await page.keyboard.type(text);
-  await page.keyboard.press('Enter');
-  await expect(editor(page)).toHaveCount(0);
+    await expect(editor(page)).toBeFocused();
+    await page.keyboard.press(`${MOD}+a`);
+    await page.keyboard.type(text);
+    await page.keyboard.press('Enter');
+    await expect(editor(page)).toHaveCount(0);
 }
 
 test.describe('creating topics', () => {
-  test('starts with a selected central topic', async ({ page }) => {
-    await open(page);
-    await expect(topics(page)).toHaveCount(1);
-    await expect(selected(page)).toHaveText('Central Topic');
-  });
+    test('starts with a selected central topic', async ({page}) => {
+        await open(page);
+        await expect(topics(page)).toHaveCount(1);
+        await expect(selected(page)).toHaveText('Central Topic');
+    });
 
-  test('Tab adds a child in edit mode, Enter commits it', async ({ page }) => {
-    await open(page);
-    await page.keyboard.press('Tab');
-    await expect(editor(page)).toBeFocused();
-    await expect(editor(page)).toHaveValue('Main Topic');
-    await typeAndCommit(page, 'Ideas');
+    test('Tab adds a child in edit mode, Enter commits it', async ({page}) => {
+        await open(page);
+        await page.keyboard.press('Tab');
+        await expect(editor(page)).toBeFocused();
+        await expect(editor(page)).toHaveValue('Main Topic');
+        await typeAndCommit(page, 'Ideas');
 
-    await expect(topics(page)).toHaveCount(2);
-    await expect(selected(page)).toHaveText('Ideas');
-    await expect(async () => {
-      const root = await box(topic(page, 'Central Topic'));
-      const child = await box(topic(page, 'Ideas'));
-      expect(child.x).toBeGreaterThan(root.x + root.width);
-    }).toPass();
-    // Keyboard control returns to the canvas after editing.
-    await expect(page.getByTestId('mindmap')).toBeFocused();
-  });
+        await expect(topics(page)).toHaveCount(2);
+        await expect(selected(page)).toHaveText('Ideas');
+        await expect(async () => {
+            const root = await box(topic(page, 'Central Topic'));
+            const child = await box(topic(page, 'Ideas'));
+            expect(child.x).toBeGreaterThan(root.x + root.width);
+        }).toPass();
+        // Keyboard control returns to the canvas after editing.
+        await expect(page.getByTestId('mindmap')).toBeFocused();
+    });
 
-  test('Enter adds a sibling after, Shift+Enter before', async ({ page }) => {
-    await open(page, '?layout=logic');
-    await page.keyboard.press('Tab');
-    await typeAndCommit(page, 'B');
-    await page.keyboard.press('Enter');
-    await typeAndCommit(page, 'C');
-    await page.keyboard.press('ArrowUp');
-    await expect(selected(page)).toHaveText('B');
-    await page.keyboard.press('Shift+Enter');
-    await typeAndCommit(page, 'A');
+    test('Enter adds a sibling after, Shift+Enter before', async ({page}) => {
+        await open(page, '?layout=logic');
+        await page.keyboard.press('Tab');
+        await typeAndCommit(page, 'B');
+        await page.keyboard.press('Enter');
+        await typeAndCommit(page, 'C');
+        await page.keyboard.press('ArrowUp');
+        await expect(selected(page)).toHaveText('B');
+        await page.keyboard.press('Shift+Enter');
+        await typeAndCommit(page, 'A');
 
-    await expect(async () => {
-      const ys = await Promise.all(['A', 'B', 'C'].map(async (t) => (await box(topic(page, t))).cy));
-      expect(ys[0]).toBeLessThan(ys[1]);
-      expect(ys[1]).toBeLessThan(ys[2]);
-    }).toPass();
-  });
+        await expect(async () => {
+            const ys = await Promise.all(['A', 'B', 'C'].map(async (t) => (await box(topic(page, t))).cy));
+            expect(ys[0]).toBeLessThan(ys[1]);
+            expect(ys[1]).toBeLessThan(ys[2]);
+        }).toPass();
+    });
 
-  test('Tab inside the editor commits and creates a grandchild', async ({ page }) => {
-    await open(page, '?layout=logic');
-    await page.keyboard.press('Tab');
-    await page.keyboard.press(`${MOD}+a`);
-    await page.keyboard.type('Parent');
-    await page.keyboard.press('Tab');
-    await expect(editor(page)).toHaveValue('Subtopic');
-    await page.keyboard.press('Enter');
+    test('Tab inside the editor commits and creates a grandchild', async ({page}) => {
+        await open(page, '?layout=logic');
+        await page.keyboard.press('Tab');
+        await page.keyboard.press(`${MOD}+a`);
+        await page.keyboard.type('Parent');
+        await page.keyboard.press('Tab');
+        await expect(editor(page)).toHaveValue('Subtopic');
+        await page.keyboard.press('Enter');
 
-    await expect(topic(page, 'Parent')).toHaveAttribute('data-depth', '1');
-    await expect(topic(page, 'Subtopic')).toHaveAttribute('data-depth', '2');
-  });
+        await expect(topic(page, 'Parent')).toHaveAttribute('data-depth', '1');
+        await expect(topic(page, 'Subtopic')).toHaveAttribute('data-depth', '2');
+    });
 
-  test('toolbar buttons add topics', async ({ page }) => {
-    await open(page);
-    await page.getByTestId('add-child').click();
-    await page.keyboard.press('Enter');
-    await page.getByTestId('add-sibling').click();
-    await page.keyboard.press('Enter');
-    await expect(topics(page)).toHaveCount(3);
-  });
+    test('toolbar buttons add topics', async ({page}) => {
+        await open(page);
+        await page.getByTestId('add-child').click();
+        await page.keyboard.press('Enter');
+        await page.getByTestId('add-sibling').click();
+        await page.keyboard.press('Enter');
+        await expect(topics(page)).toHaveCount(3);
+    });
 });
 
 test.describe('editing', () => {
-  test('typing on a selected topic replaces its text', async ({ page }) => {
-    await open(page);
-    await page.keyboard.type('My plan');
-    await expect(editor(page)).toHaveValue('My plan');
-    await page.keyboard.press('Enter');
-    await expect(topics(page)).toHaveText(['My plan']);
-  });
+    test('typing on a selected topic replaces its text', async ({page}) => {
+        await open(page);
+        await page.keyboard.type('My plan');
+        await expect(editor(page)).toHaveValue('My plan');
+        await page.keyboard.press('Enter');
+        await expect(topics(page)).toHaveText(['My plan']);
+    });
 
-  test('Escape cancels editing', async ({ page }) => {
-    await open(page);
-    await page.keyboard.press('F2');
-    await page.keyboard.type(' changed');
-    await page.keyboard.press('Escape');
-    await expect(topics(page)).toHaveText(['Central Topic']);
-  });
+    test('Escape cancels editing', async ({page}) => {
+        await open(page);
+        await page.keyboard.press('F2');
+        await page.keyboard.type(' changed');
+        await page.keyboard.press('Escape');
+        await expect(topics(page)).toHaveText(['Central Topic']);
+    });
 
-  test('double click starts editing', async ({ page }) => {
-    await open(page, '?sample=software-factory&layout=logic');
-    await topic(page, 'Events').dblclick();
-    await expect(editor(page)).toHaveValue('Events');
-    await page.keyboard.type('Event Sourcing');
-    await page.keyboard.press('Enter');
-    await expect(topic(page, 'Event Sourcing')).toBeVisible();
-  });
+    test('double click starts editing', async ({page}) => {
+        await open(page, '?sample=software-factory&layout=logic');
+        await topic(page, 'Events').dblclick();
+        await expect(editor(page)).toHaveValue('Events');
+        await page.keyboard.type('Event Sourcing');
+        await page.keyboard.press('Enter');
+        await expect(topic(page, 'Event Sourcing')).toBeVisible();
+    });
 
-  test('Shift+Enter in the editor inserts a line break', async ({ page }) => {
-    await open(page);
-    await page.keyboard.press('F2');
-    await page.keyboard.press('End');
-    await page.keyboard.press('Shift+Enter');
-    await page.keyboard.type('second line');
-    await page.keyboard.press('Enter');
-    await expect(topics(page)).toHaveText(['Central Topic\nsecond line']);
-  });
+    test('Shift+Enter in the editor inserts a line break', async ({page}) => {
+        await open(page);
+        await page.keyboard.press('F2');
+        await page.keyboard.press('End');
+        await page.keyboard.press('Shift+Enter');
+        await page.keyboard.type('second line');
+        await page.keyboard.press('Enter');
+        await expect(topics(page)).toHaveText(['Central Topic\nsecond line']);
+    });
 });
 
 test.describe('selection and structure', () => {
-  test('arrow keys follow the logic chart layout', async ({ page }) => {
-    await open(page, '?sample=software-factory&layout=logic');
-    await page.keyboard.press('ArrowRight');
-    await expect(selected(page)).toHaveText('Loops');
-    await page.keyboard.press('ArrowDown');
-    await expect(selected(page)).toHaveText('Software Quality Attributes');
-    await page.keyboard.press('ArrowRight');
-    await expect(selected(page)).toHaveText('Availability');
-    await page.keyboard.press('ArrowLeft');
-    await page.keyboard.press('ArrowLeft');
-    await expect(selected(page)).toHaveText('Software Factory');
-  });
+    test('arrow keys follow the logic chart layout', async ({page}) => {
+        await open(page, '?sample=software-factory&layout=logic');
+        await page.keyboard.press('ArrowRight');
+        await expect(selected(page)).toHaveText('Loops');
+        await page.keyboard.press('ArrowDown');
+        await expect(selected(page)).toHaveText('Software Quality Attributes');
+        await page.keyboard.press('ArrowRight');
+        await expect(selected(page)).toHaveText('Availability');
+        await page.keyboard.press('ArrowLeft');
+        await page.keyboard.press('ArrowLeft');
+        await expect(selected(page)).toHaveText('Software Factory');
+    });
 
-  test('clicking selects a topic', async ({ page }) => {
-    await open(page, '?sample=software-factory&layout=logic');
-    await topic(page, 'Security').click();
-    await expect(selected(page)).toHaveText('Security');
-    await page.keyboard.press('ArrowDown');
-    await expect(selected(page)).toHaveText('Maintainability');
-  });
+    test('clicking selects a topic', async ({page}) => {
+        await open(page, '?sample=software-factory&layout=logic');
+        await topic(page, 'Security').click();
+        await expect(selected(page)).toHaveText('Security');
+        await page.keyboard.press('ArrowDown');
+        await expect(selected(page)).toHaveText('Maintainability');
+    });
 
-  test('Delete removes a subtree; undo and redo restore it', async ({ page }) => {
-    await open(page, '?sample=software-factory&layout=logic');
-    await expect(topics(page)).toHaveCount(16);
-    await topic(page, 'Software Quality Attributes').click();
-    await page.keyboard.press('Delete');
-    await expect(topics(page)).toHaveCount(6);
-    await expect(selected(page)).toHaveText('Formal Verification For Each software attribute');
+    test('Delete removes a subtree; undo and redo restore it', async ({page}) => {
+        await open(page, '?sample=software-factory&layout=logic');
+        await expect(topics(page)).toHaveCount(16);
+        await topic(page, 'Software Quality Attributes').click();
+        await page.keyboard.press('Delete');
+        await expect(topics(page)).toHaveCount(6);
+        await expect(selected(page)).toHaveText('Formal Verification For Each software attribute');
 
-    await page.keyboard.press(`${MOD}+z`);
-    await expect(topics(page)).toHaveCount(16);
-    await page.keyboard.press(`${MOD}+Shift+z`);
-    await expect(topics(page)).toHaveCount(6);
-  });
+        await page.keyboard.press(`${MOD}+z`);
+        await expect(topics(page)).toHaveCount(16);
+        await page.keyboard.press(`${MOD}+Shift+z`);
+        await expect(topics(page)).toHaveCount(6);
+    });
 
-  test('the central topic cannot be deleted', async ({ page }) => {
-    await open(page);
-    await page.keyboard.press('Backspace');
-    await expect(topics(page)).toHaveCount(1);
-    await expect(page.getByTestId('delete')).toBeDisabled();
-  });
+    test('the central topic cannot be deleted', async ({page}) => {
+        await open(page);
+        await page.keyboard.press('Backspace');
+        await expect(topics(page)).toHaveCount(1);
+        await expect(page.getByTestId('delete')).toBeDisabled();
+    });
 
-  test('Alt+Arrow reorders siblings', async ({ page }) => {
-    await open(page, '?sample=software-factory&layout=logic');
-    await topic(page, 'Events').click();
-    await page.keyboard.press('Alt+ArrowUp');
-    await expect(async () => {
-      const formal = await box(topic(page, 'Formal Verification For Each software attribute'));
-      const ev = await box(topic(page, 'Events'));
-      expect(ev.cy).toBeLessThan(formal.cy);
-    }).toPass();
-  });
+    test('Alt+Arrow reorders siblings', async ({page}) => {
+        await open(page, '?sample=software-factory&layout=logic');
+        await topic(page, 'Events').click();
+        await page.keyboard.press('Alt+ArrowUp');
+        await expect(async () => {
+            const formal = await box(topic(page, 'Formal Verification For Each software attribute'));
+            const ev = await box(topic(page, 'Events'));
+            expect(ev.cy).toBeLessThan(formal.cy);
+        }).toPass();
+    });
 
-  test('collapse hides descendants and the badge expands them', async ({ page }) => {
-    await open(page, '?sample=software-factory&layout=logic');
-    await topic(page, 'Software Quality Attributes').click();
-    await page.keyboard.press(`${MOD}+/`);
-    await expect(topics(page)).toHaveCount(7);
-    const badge = topic(page, 'Software Quality Attributes').getByTestId('collapse-badge');
-    await expect(badge).toHaveText('9');
-    await badge.click();
-    await expect(topics(page)).toHaveCount(16);
-  });
+    test('collapse hides descendants and the badge expands them', async ({page}) => {
+        await open(page, '?sample=software-factory&layout=logic');
+        await topic(page, 'Software Quality Attributes').click();
+        await page.keyboard.press(`${MOD}+/`);
+        await expect(topics(page)).toHaveCount(7);
+        const badge = topic(page, 'Software Quality Attributes').getByTestId('collapse-badge');
+        await expect(badge).toHaveText('9');
+        await badge.click();
+        await expect(topics(page)).toHaveCount(16);
+    });
 });
 
 test.describe('layouts', () => {
-  test('logic chart grows to the right', async ({ page }) => {
-    await open(page, '?sample=product-launch&layout=logic');
-    const root = await box(topic(page, 'Product Launch'));
-    for (const t of ['Goals', 'Risks', 'Budget']) {
-      expect((await box(topic(page, t))).x).toBeGreaterThan(root.x + root.width);
-    }
-  });
-
-  test('mind map balances branches on both sides', async ({ page }) => {
-    await open(page, '?sample=product-launch');
-    const root = await box(topic(page, 'Product Launch'));
-    for (const t of ['Goals', 'Audience', 'Channels']) {
-      expect((await box(topic(page, t))).x).toBeGreaterThan(root.x + root.width);
-    }
-    for (const t of ['Timeline', 'Risks', 'Budget']) {
-      const b = await box(topic(page, t));
-      expect(b.x + b.width).toBeLessThan(root.x);
-    }
-    // Arrow keys on the left side are mirrored.
-    await page.keyboard.press('ArrowLeft');
-    await expect(selected(page)).toHaveText('Timeline');
-    await page.keyboard.press('ArrowLeft');
-    await expect(selected(page)).toHaveText('Beta – March');
-  });
-
-  test('org chart grows downwards', async ({ page }) => {
-    await open(page, '?sample=organisation&layout=org');
-    const root = await box(topic(page, 'CEO'));
-    const cto = await box(topic(page, 'CTO'));
-    const qa = await box(topic(page, 'QA'));
-    expect(cto.y).toBeGreaterThan(root.y + root.height);
-    expect(qa.y).toBeGreaterThan(cto.y + cto.height);
-    await page.keyboard.press('ArrowDown');
-    await expect(selected(page)).toHaveText('CTO');
-    await page.keyboard.press('ArrowRight');
-    await expect(selected(page)).toHaveText('CFO');
-  });
-
-  test('layout can be switched from the toolbar', async ({ page }) => {
-    await open(page, '?sample=organisation');
-    await page.getByTestId('layout-org').click();
-    await expect(page.getByTestId('mindmap')).toHaveAttribute('data-layout', 'org');
-    await expect(page.getByTestId('layout-org')).toHaveAttribute('aria-pressed', 'true');
-    await expect(async () => {
-      const root = await box(topic(page, 'CEO'));
-      const cfo = await box(topic(page, 'CFO'));
-      expect(cfo.y).toBeGreaterThan(root.y + root.height);
-    }).toPass();
-  });
-
-  test('topics never overlap', async ({ page }) => {
-    for (const q of ['?sample=software-factory&layout=logic', '?sample=thinking-patterns', '?sample=organisation&layout=org']) {
-      await open(page, q);
-      const boxes = await topics(page).evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON()));
-      for (let i = 0; i < boxes.length; i++)
-        for (let j = i + 1; j < boxes.length; j++) {
-          const a = boxes[i];
-          const b = boxes[j];
-          const overlap = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
-          expect(overlap, `${q}: topics ${i} and ${j} overlap`).toBe(false);
+    test('logic chart grows to the right', async ({page}) => {
+        await open(page, '?sample=product-launch&layout=logic');
+        const root = await box(topic(page, 'Product Launch'));
+        for (const t of ['Goals', 'Risks', 'Budget']) {
+            expect((await box(topic(page, t))).x).toBeGreaterThan(root.x + root.width);
         }
-    }
-  });
+    });
+
+    test('mind map balances branches on both sides', async ({page}) => {
+        await open(page, '?sample=product-launch');
+        const root = await box(topic(page, 'Product Launch'));
+        for (const t of ['Goals', 'Audience', 'Channels']) {
+            expect((await box(topic(page, t))).x).toBeGreaterThan(root.x + root.width);
+        }
+        for (const t of ['Timeline', 'Risks', 'Budget']) {
+            const b = await box(topic(page, t));
+            expect(b.x + b.width).toBeLessThan(root.x);
+        }
+        // Arrow keys on the left side are mirrored.
+        await page.keyboard.press('ArrowLeft');
+        await expect(selected(page)).toHaveText('Timeline');
+        await page.keyboard.press('ArrowLeft');
+        await expect(selected(page)).toHaveText('Beta – March');
+    });
+
+    test('org chart grows downwards', async ({page}) => {
+        await open(page, '?sample=organisation&layout=org');
+        const root = await box(topic(page, 'CEO'));
+        const cto = await box(topic(page, 'CTO'));
+        const qa = await box(topic(page, 'QA'));
+        expect(cto.y).toBeGreaterThan(root.y + root.height);
+        expect(qa.y).toBeGreaterThan(cto.y + cto.height);
+        await page.keyboard.press('ArrowDown');
+        await expect(selected(page)).toHaveText('CTO');
+        await page.keyboard.press('ArrowRight');
+        await expect(selected(page)).toHaveText('CFO');
+    });
+
+    test('layout can be switched from the toolbar', async ({page}) => {
+        await open(page, '?sample=organisation');
+        await page.getByTestId('layout-org').click();
+        await expect(page.getByTestId('mindmap')).toHaveAttribute('data-layout', 'org');
+        await expect(page.getByTestId('layout-org')).toHaveAttribute('aria-pressed', 'true');
+        await expect(async () => {
+            const root = await box(topic(page, 'CEO'));
+            const cfo = await box(topic(page, 'CFO'));
+            expect(cfo.y).toBeGreaterThan(root.y + root.height);
+        }).toPass();
+    });
+
+    test('topics never overlap', async ({page}) => {
+        for (const q of [
+            '?sample=software-factory&layout=logic',
+            '?sample=thinking-patterns',
+            '?sample=organisation&layout=org',
+        ]) {
+            await open(page, q);
+            const boxes = await topics(page).evaluateAll((els) => els.map((e) => e.getBoundingClientRect().toJSON()));
+            for (let i = 0; i < boxes.length; i++)
+                for (let j = i + 1; j < boxes.length; j++) {
+                    const a = boxes[i];
+                    const b = boxes[j];
+                    const overlap = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom;
+                    expect(overlap, `${q}: topics ${i} and ${j} overlap`).toBe(false);
+                }
+        }
+    });
 });

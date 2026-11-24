@@ -1,24 +1,24 @@
 export type NodeId = string;
 
 export interface MindNode {
-  id: NodeId;
-  text: string;
-  parentId: NodeId | null;
-  children: NodeId[];
-  collapsed?: boolean;
+    id: NodeId;
+    text: string;
+    parentId: NodeId | null;
+    children: NodeId[];
+    collapsed?: boolean;
 }
 
 /** Normalized, immutable mind map. Every operation returns a new tree. */
 export interface MindMapTree {
-  rootId: NodeId;
-  nodes: Record<NodeId, MindNode>;
+    rootId: NodeId;
+    nodes: Record<NodeId, MindNode>;
 }
 
 /** Nested, human-friendly description of a map (maps 1:1 to a Markdown list later). */
 export interface Outline {
-  text: string;
-  collapsed?: boolean;
-  children?: Outline[];
+    text: string;
+    collapsed?: boolean;
+    children?: Outline[];
 }
 
 /**

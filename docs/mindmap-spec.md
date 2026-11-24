@@ -10,10 +10,10 @@ In the very first iteration we will create mindmap app where I can create MindAp
 
 ### Stack
 
- - React
- - React Flow
- - Automatic positioning and alignment: ELK.js
- - Zustand
+- React
+- React Flow
+- Automatic positioning and alignment: ELK.js
+- Zustand
 
 ### Testing
 
