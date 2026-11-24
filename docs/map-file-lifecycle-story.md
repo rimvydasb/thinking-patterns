@@ -12,6 +12,10 @@ One user works with the map in three ways:
 
 The `.map.md` file is the durable source of truth, and `MapDocument` is the working copy in memory. Every writer turns into `MapOp` batches, so the GUI receives file changes through the existing `patch` messages.
 
+The user picks the map file in the GUI from a server-side listing of a configured directory. The server opens the picked file by its absolute path, and the GUI never uploads file content (D11).
+
+The app remembers the last file in browser storage and reopens it after a restart.
+
 The main design decision is change detection by file stamp (modification time, size), confirmed by a content hash (D5).
 
 ## Context and Gap
@@ -26,7 +30,10 @@ The main design decision is change detection by file stamp (modification time, s
 | [tree.ts](../app/mindmap/model/tree.ts) `fromOutline` | Creates path ids (`root`, `root.0`). Every map gets the root id `root`. | The file loader assigns random ids (D3). |
 | [topicRef.ts](../server/mcp/topicRef.ts) | Name and path resolution for agents, including `normalize()`. Lives in `server/mcp`. | The pure matching part moves to `app/mindmap/model/topicPath.ts`, so the parser can resolve note headings. |
 | [protocol.ts](../app/mindmap/sync/protocol.ts) | `snapshot`, `patch`, `focus`, `error`. No file state. | `snapshot` gets `file`. New messages: `file` (server to app), `writeFile` (app to server). |
-| [main.ts](../server/main.ts) | Starts the server with an empty map. | Reads `MAP_FILE` and opens that file before `listen()`. |
+| [main.ts](../server/main.ts) | Starts the server with an empty map. | Creates a `MapWorkspace` for `MAPS_DIR`, and opens `MAP_FILE` if it is set (D11). |
+| [app.ts](../server/app.ts) `buildServer()` | Takes one `MapDocument` and passes it to all routes. | Takes a `MapWorkspace`. Routes get the current binding from it on each request. |
+| [api/routing.ts](../server/api/routing.ts) | Read-only `GET /api/health` and `GET /api/map`. | New `GET /api/files` and `POST /api/map/open` (D11). |
+| [Toolbar.tsx](../app/mindmap/components/Toolbar.tsx) | No file actions. | Gets an "Open…" button and shows the absolute path of the open file. |
 | [jest.config.cjs](../jest.config.cjs) | Jest with `ts-jest` in CommonJS mode runs `*.test.ts`. `@storybook/test-runner` (Jest-based) runs the story play tests. | Removed. Vitest runs both (D12). |
 | [mcp-server-spec.md](mcp-server-spec.md) | Lists persistence as out of scope. | Updated in Phase X. |
 
@@ -58,7 +65,10 @@ The main design decision is change detection by file stamp (modification time, s
 - **Decision:** the serializer ignores `collapsed`. `MapFileBinding` does not write the file after a batch that changes only `collapsed`. Folded state lives in memory only.
 - **Reason:** folding a branch is a view action. If the file stored it, each fold would create a Git change with no meaning.
 - **Rejected:** a collapsed marker (an HTML comment) after the bullet text. It produces diff noise for a view change.
-- **Revisit if:** the user wants folded state to survive restarts. Then store it in a gitignored sidecar file (see Open Question 1).
+- **Rejected:** a gitignored sidecar file `.thinking-patterns/view.json` keyed by topic path. Folds would survive a restart, but the second file needs its own path matching after renames. The user confirmed memory only.
+- **Revisit if:** the user wants folded state to survive restarts. The sidecar can come later without a format change.
+
+> Clarification: a restart and the opening of another file unfold all topics. The user accepted this trade-off.
 
 ### D5: The binding detects file changes by stamp and confirms them by content hash
 
@@ -114,12 +124,35 @@ The main design decision is change detection by file stamp (modification time, s
 - **Decision:** in the `invalid` and `missing` states, the binding does not write. GUI edits still apply in memory. MCP change tools return an error with the diagnostics. The GUI shows a banner with a "Write the app version to the file" action, which sends `writeFile`.
 - **Reason:** an invalid file is often an edit in progress or a Git merge conflict (`<<<<<<<`), and a write would destroy the user's work. A missing file is often a `git checkout` of a branch without it, and a write would add an untracked file to that branch. The agent gets an error because it can fix the file itself. A GUI user sees the banner and decides.
 
-### D11: The server opens one file, set by `MAP_FILE`
+### D11: The user picks the map file in the GUI from a server-side directory listing
 
-- **Decision:** `server/main.ts` reads the `MAP_FILE` environment variable (default `./map.md` in the working directory). If the file does not exist, the server creates it with format v1 and the root topic `Central Topic`. Opening another file at runtime is out of scope.
-- **Reason:** the MCP spec defines one open map, and a single user works on one map at a time. The Tauri app adds a file dialog later and calls the same `openMapFile()`.
+- **Decision:** `MapWorkspace` holds the maps root directory (`MAPS_DIR`, default: the server working directory) and at most one open `MapFileBinding`. The GUI file picker browses the root with `GET /api/files`. The user picks a file, and the GUI sends its absolute path to `POST /api/map/open`. The server opens the file in place with `openMapFile()`. The GUI never sends file content.
+- **Decision:** the server starts with no open file. If `MAP_FILE` is set, the server opens that file before `listen()`. There is no default file name.
+- **Decision:** the picker lists subdirectories and `*.map.md` files. It hides directories that start with `.` and `node_modules`.
+- **Decision:** the picker can create a new map: `POST /api/map/open` with `create: true` creates `<dir>/<name>.map.md` with format v1 and the root topic `Central Topic`. The request fails if the file exists.
+- **Decision:** the app remembers the last opened file in browser `localStorage` (key `thinking-patterns.lastMapFile`, value: the absolute path). After `hello`, if the server answers with `file: null`, the app sends the stored path to `POST /api/map/open`. On a 400 or 404 response, the app removes the key and shows the picker. If the server already has a file open (`MAP_FILE` or another window), the app does not send the stored path.
+- **Decision:** one file is open at a time. Opening another file closes the current binding first (`close()` flushes it), then opens the new file with a new `MapDocument`. All connected clients get a `snapshot` of the new map.
+- **Reason:** the user asked for a file picker that uses the file by its fully qualified name, not an upload. The file must stay where it is, because the user edits it in a text editor and versions it with Git, and agents edit it with file tools (D1). An uploaded copy would break all three. The server reads the directory, because a browser page cannot read absolute paths from the local disk.
+- **Reason (no default):** a default such as `./map.md` creates a file in the repository root on the first start. With the picker, the user chooses or creates the file.
+- **Reason (reopen):** the user asked to reopen the last file after a restart, and to keep it in browser storage. The server then keeps no state file, which matches the memory-only choice for folded state (D4).
+- **Reason (`*.map.md` only):** the suffix marks a mind map file. A list of every `.md` file shows READMEs and docs that are not maps and fail to parse.
+- **Reason (one file):** the MCP spec defines one open map, and a single user works on one map at a time.
+- **Rejected:** upload of the file content from a browser `<input type="file">`. The browser gives no absolute path, so the server cannot write the change back to the original file.
+- **Rejected:** a free-text path field with no listing. The user must type or paste a long path, and a typing error opens nothing.
+- **Rejected:** a gitignored server state file (`.thinking-patterns/state.json` under `MAPS_DIR`) for the last path. It works for every browser, but it adds a second file to the repository directory and a stale path to handle on the server.
+- **Rejected:** server refuses to start without `MAP_FILE`. `npm run dev:all` then needs an extra setting, and the user cannot switch maps.
 
-> Assumption: the default name `./map.md` is a placeholder choice. See Open Question 2.
+> Rationale (root check): `POST /api/map/open` and `GET /api/files` accept only paths inside `MAPS_DIR`, after `realpath()`. The server listens on `127.0.0.1`, but a web page in the user's browser can still send requests to it. The root check stops such a request from reading or creating files elsewhere on the disk. `MAP_FILE` is trusted configuration and has no root check.
+
+> Rationale (switch): `close()` flushes the current binding, so the switch writes all pending changes of a `clean` or `writing` file. In the `invalid` and `missing` states, `close()` cannot write and drops the in-memory changes. The picker therefore asks the user to confirm the switch in these two states.
+
+> Context: the random root id of each load (D3) makes `connectSync` replace the map on the new `snapshot`. Pending GUI ops of the previous map then skip, because their ids do not exist in the new map.
+
+> Rationale (no override): a running server with an open file is the current state of the user's work. A stored path from an older session MUST NOT switch it, because a second window or a restarted tab would then close the file the user works on.
+
+> Assumption: Tauri webviews keep `localStorage` between app starts (WKWebView on macOS, WebView2 on Windows). Verify in the Tauri port. If it does not persist, use the Tauri `store` plugin with the same key.
+
+> Clarification: the Tauri app MAY replace the picker with a native file dialog later. It sends the picked absolute path to the same open endpoint.
 
 ### D12: Vitest replaces Jest for all tests
 
@@ -194,6 +227,8 @@ flowchart LR
     end
     subgraph server["server/"]
         main["main.ts"]
+        MapWorkspace
+        apiRoutes
         MapFileBinding
         NodeFsPort
         MapDocument
@@ -203,9 +238,14 @@ flowchart LR
     subgraph app["app/"]
         connectSync
         FileStatusBanner
+        MapFilePicker
     end
     MapFile[("map file .map.md")]
-    main -->|openMapFile MAP_FILE| MapFileBinding
+    main -->|create, open MAP_FILE| MapWorkspace
+    MapFilePicker -.->|GET /api/files, POST /api/map/open| apiRoutes
+    apiRoutes -->|listDir, open| MapWorkspace
+    MapWorkspace -->|listDir| NodeFsPort
+    MapWorkspace -->|openMapFile, close| MapFileBinding
     MapFileBinding -->|read, writeAtomic, watch, stat| NodeFsPort
     NodeFsPort -.->|bytes| MapFile
     MapFileBinding -->|parse, serialize| parseMapFile
@@ -213,15 +253,77 @@ flowchart LR
     MapFileBinding -->|match ids| reconcileTrees
     MapFileBinding -->|ops from file change| diffTrees
     MapFileBinding -->|apply, subscribe| MapDocument
+    mcpTools -->|current binding| MapWorkspace
     mcpTools -->|apply, await flush| MapFileBinding
+    syncRoutes -->|subscribe open file| MapWorkspace
     syncRoutes -->|subscribe file state| MapFileBinding
     syncRoutes -.->|snapshot, patch, file| connectSync
     connectSync -->|FileState| FileStatusBanner
+    connectSync -->|FileState or null| MapFilePicker
 ```
 
-- `MapFileBinding` is the only module that writes the map file.
+- `MapFileBinding` is the only module that writes the map file. `MapWorkspace` creates a new file only through `openMapFile()`.
 - `NodeFsPort` is the only module that imports `node:fs`. Tests use `MemoryFsPort`.
-- The Tauri back end replaces `MapFileBinding` and `NodeFsPort` with Rust code and keeps the protocol.
+- Routes and MCP tools get the current binding from `MapWorkspace` on each request. They keep no reference across a file switch.
+- The Tauri back end replaces `MapWorkspace`, `MapFileBinding` and `NodeFsPort` with Rust code and keeps the protocol and the REST endpoints.
+
+### The user picks and opens a map file
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant MapFilePicker
+    participant apiRoutes
+    participant MapWorkspace
+    participant OldBinding as current MapFileBinding
+    participant NewBinding as new MapFileBinding
+    participant syncRoutes
+    participant connectSync
+    User->>MapFilePicker: Open… or no file open
+    MapFilePicker->>apiRoutes: GET /api/files?dir=abs
+    apiRoutes->>MapWorkspace: listDir(dir)
+    MapWorkspace-->>MapFilePicker: dirs and *.map.md files, absolute paths
+    User->>MapFilePicker: pick file or enter new name
+    opt current state invalid or missing
+        MapFilePicker->>User: confirm loss of unwritten changes
+    end
+    MapFilePicker->>apiRoutes: POST /api/map/open {path, create}
+    apiRoutes->>MapWorkspace: open(path, create)
+    MapWorkspace->>MapWorkspace: realpath, root check, suffix check
+    MapWorkspace->>OldBinding: close()
+    MapWorkspace->>NewBinding: openMapFile(path)
+    MapWorkspace->>syncRoutes: open file changed
+    syncRoutes->>connectSync: snapshot with new tree and file
+    connectSync->>connectSync: new rootId, replace map
+    apiRoutes-->>MapFilePicker: 200 FileState
+```
+
+| Request | Error | Status |
+| --- | --- | --- |
+| `GET /api/files` | `dir` is outside `MAPS_DIR` or is not a directory | 400 |
+| `POST /api/map/open` | `path` is not absolute, is outside `MAPS_DIR`, or does not end with `.map.md` | 400 |
+| `POST /api/map/open` | File does not exist and `create` is not `true` | 404 |
+| `POST /api/map/open` | `create` is `true` and the file exists | 409 |
+| `POST /api/map/open` | File parses with errors | 200, binding in state `invalid` |
+
+- An `invalid` file opens like in D10: the GUI shows the banner and the user fixes the file.
+- A request that opens the file that is already open returns its `FileState` and changes nothing.
+- After each successful open, the app writes the path to `localStorage` (D11).
+
+The app reopens the last file after a server restart:
+
+```mermaid
+flowchart TD
+    hello["connectSync sends hello"] --> answer{"server answer"}
+    answer -->|snapshot with file| store["store file.path in localStorage"]
+    answer -->|file null| stored{"localStorage has a path?"}
+    stored -->|no| picker["show MapFilePicker"]
+    stored -->|yes| open["POST /api/map/open with stored path"]
+    open -->|200| snap["server sends snapshot to all clients"]
+    open -->|400 or 404| clear["remove the key"]
+    clear --> picker
+```
+- `MapWorkspace` runs one `open()` at a time (a promise queue).
 
 ### File state lifecycle
 
@@ -376,6 +478,8 @@ interface FsPort {
   read(path: string): Promise<string>; // UTF-8
   writeAtomic(path: string, text: string): Promise<void>; // temp file in the same directory, then rename
   watchDir(dir: string, onChange: (fileName: string) => void): () => void; // returns unsubscribe
+  listDir(dir: string): Promise<{name: string; kind: 'dir' | 'file'}[]>; // direct entries only
+  realpath(path: string): Promise<string>; // resolves symlinks; rejects if the path does not exist
 }
 
 // server/map/mapFileBinding.ts
@@ -404,45 +508,94 @@ interface MapFileBinding {
   close(): Promise<void>; // flushes, stops watch and poll
 }
 
-declare function openMapFile(path: string, opts?: {fs?: FsPort; pollMs?: number}): Promise<MapFileBinding>;
+declare function openMapFile(
+  path: string,
+  opts?: {fs?: FsPort; pollMs?: number; create?: boolean},
+): Promise<MapFileBinding>; // create: write a new format v1 file, reject if it exists
+
+// server/map/mapWorkspace.ts
+interface DirListing {
+  root: string; // absolute path of MAPS_DIR
+  dir: string; // absolute path of the listed directory
+  parent: string | null; // absolute path of the parent directory, null at the root
+  entries: {name: string; path: string; kind: 'dir' | 'file'}[]; // subdirectories first, then *.map.md files, each sorted by name
+}
+
+interface MapWorkspace {
+  readonly root: string; // absolute path of MAPS_DIR
+  current(): MapFileBinding | null; // the open file, null before the first open
+  listDir(dir?: string): Promise<DirListing>; // default: root; rejects outside root
+  open(path: string, opts?: {create?: boolean}): Promise<FileState>; // closes the current binding, opens path
+  subscribe(listener: (binding: MapFileBinding | null) => void): () => void; // open file changes for syncRoutes
+  close(): Promise<void>; // closes the current binding
+}
+
+declare function createMapWorkspace(root: string, opts?: {fs?: FsPort; pollMs?: number}): MapWorkspace;
+
+// app/mindmap/sync/lastMapFile.ts
+declare function loadLastMapFile(): string | null; // null if not stored or storage throws
+declare function saveLastMapFile(path: string): void; // ignores storage errors
+declare function clearLastMapFile(): void; // ignores storage errors
+
+// app/mindmap/components/MapFilePicker.tsx
+interface MapFilePickerProps {
+  currentFile: FileState | null; // null: no file open, the picker cannot be dismissed
+  onOpened(file: FileState): void; // called after POST /api/map/open succeeds
+  onCancel(): void; // closes the picker; disabled while currentFile is null
+}
 ```
 
 ### Protocol changes
 
-| Direction     | Message     | Change                                                                        |
-| ------------- | ----------- | ----------------------------------------------------------------------------- |
-| Server to app | `snapshot`  | New field `file: FileState`                                                   |
-| Server to app | `file`      | New. `file: FileState`. Sent on every state or diagnostics change.            |
-| App to server | `writeFile` | New. No fields. Calls `forceWrite()`.                                         |
-| Both          | `MapOp`     | New op `{op: 'setNote'; id; note: string}`. An empty string removes the note. |
+| Direction | Message | Change |
+| --- | --- | --- |
+| Server to app | `snapshot` | New field `file: FileState`. Sent after `hello` and to all clients after each file open. |
+| Server to app | `file` | New. `file: FileState \| null`. Sent on every state or diagnostics change. Sent with `null` after `hello` while no file is open. |
+| App to server | `writeFile` | New. No fields. Calls `forceWrite()`. |
+| App to server | `ops` | The server answers with `error` while no file is open. |
+| Both | `MapOp` | New op `{op: 'setNote'; id; note: string}`. An empty string removes the note. |
+
+| Method | Path            | Request                                                | Response                  |
+| ------ | --------------- | ------------------------------------------------------ | ------------------------- |
+| `GET`  | `/api/files`    | Query `dir?`: absolute path, default `MAPS_DIR`        | `DirListing`              |
+| `POST` | `/api/map/open` | Body `{path: string; create?: boolean}`: absolute path | `FileState`               |
+| `GET`  | `/api/map`      | Unchanged                                              | 404 while no file is open |
+
+> Rationale: listing and opening use REST, not the sync WebSocket, because each call has one caller that needs a direct answer or error. The result of an open reaches all clients through the sync `snapshot`.
 
 ### MCP changes
 
-| Tool             | Change                                                                                           |
-| ---------------- | ------------------------------------------------------------------------------------------------ |
+| Tool | Change |
+| --- | --- |
 | All change tools | Return after `flush()` resolves. Return an error with the diagnostics in `invalid` or `missing`. |
-| `get_topic`      | Topics include `note` if set.                                                                    |
-| `update_topic`   | New argument `note?`.                                                                            |
-| `get_map_info`   | New read tool. Returns `path`, `state`, `diagnostics`, `writtenAt`, `changedOnDiskAt`.           |
+| All map tools | Return the error "No map file is open. Ask the user to open one in the app." while no file is open. |
+| `get_topic` | Topics include `note` if set. |
+| `update_topic` | New argument `note?`. |
+| `get_map_info` | New read tool. Returns `path`, `state`, `diagnostics`, `writtenAt`, `changedOnDiskAt`, or `{path: null}` while no file is open. |
 
 - The `get_map_info` description tells agents that they MAY edit the file directly, and that the open app shows the change.
 
 ## Architecture Changes
 
-- `server/map/` gets `fsPort.ts` and `mapFileBinding.ts`. `buildServer()` takes a `MapFileBinding` instead of a bare `MapDocument`.
+- `server/map/` gets `fsPort.ts`, `mapFileBinding.ts` and `mapWorkspace.ts`. `buildServer()` takes a `MapWorkspace` instead of a bare `MapDocument`.
+- `app/mindmap/components/` gets `MapFilePicker.tsx` and `FileStatusBanner.tsx`.
 - `app/mindmap/model/` gets `mapFile/` (parse, serialize, reconcile, fixtures) and `topicPath.ts`.
 - [mcp-server-spec.md](mcp-server-spec.md): remove "Project persistence is out of scope" and the "No persistence" limitation. Link this story.
 
 ## Out of Scope
 
-- Opening another file at runtime, a file dialog, and a list of recent files.
+- A list of recent files.
+- Files outside `MAPS_DIR` in the picker, and file upload.
+- Rename, move and delete of map files in the picker.
 - Several maps open at the same time.
 - Display and editing of notes in the GUI. Notes are parsed, kept, synced and available to agents.
 
 ## Future Improvements
 
 - Show notes in the GUI with `@tanstack/markdown/react`. Rendering is the main use case of that package, and the GUI build (Vite) loads ES modules without extra setup.
-- Persistence of `collapsed` and the layout (`mindmap`, `logic`, `org`).
+- Persistence of `collapsed` and the layout (`mindmap`, `logic`, `org`) in a gitignored sidecar file (D4).
+- MCP tools `list_map_files` and `open_map_file`, so an agent can switch the map.
+- A native file dialog in the Tauri app (D11).
 - Multi-user and multi-tenant work. One user runs one server for one map.
 
 ## Limitations
@@ -452,23 +605,22 @@ declare function openMapFile(path: string, opts?: {fs?: FsPort; pollMs?: number}
 - **Separator in topic text:** a topic text that contains `>` cannot be used in a path note heading. The note of such a topic becomes an orphan if its text is not unique.
 - **Same-text siblings:** two siblings with equal text have equal paths. A note heading cannot name one of them (same limit as `topicPath` in the MCP spec).
 - **Pending GUI edits after a server restart:** pending GUI ops from before the restart skip, because the ids are new (D3). The server loses edits that it did not receive before it stopped.
-
-## Open Questions
-
-1. **Persistence of folded state**: D4 keeps `collapsed` in memory only, so a restart unfolds all topics. Question to address: must folded state survive a restart? Option 1 (recommended, assumed in this story): memory only for now. Trade-off: no extra file, but folds reset on restart. Reason: a mind map opens with few folds, and the sidecar can come later without a format change. Option 2: a gitignored sidecar `.thinking-patterns/view.json` keyed by topic path. Trade-off: folds survive, but a second file needs its own path matching after renames.
-2. **Default map file**: D11 uses `./map.md` when `MAP_FILE` is not set. Question to address: which default does the user want? Option 1 (recommended, assumed in this story): `./map.md` in the server working directory. Trade-off: simple, but a new file appears in the repository root on the first start. Reason: the user sees the file at once and can commit or move it. Option 2: no default. The server refuses to start without `MAP_FILE`. Trade-off: no surprise file, but `npm run dev:all` needs an extra setting.
+- **Folded state:** a restart or a file switch unfolds all topics (D4).
+- **Last file per browser:** `localStorage` belongs to one browser profile and one origin. A different browser, a private window, or a new port shows the picker again (D11).
+- **Switch from a broken file:** a switch away from an `invalid` or `missing` file drops the unwritten changes. The picker asks for a confirmation first (D11).
 
 ## Verification
 
-| Check            | Command                                                          |
-| ---------------- | ---------------------------------------------------------------- |
-| Build            | `npm run build`                                                  |
-| Type check       | `npm run typecheck`                                              |
-| Lint             | `npm run lint`                                                   |
-| Dependency rules | `npm run depcruise`                                              |
-| Test             | `npm test`                                                       |
-| E2E              | `npm run test:e2e`                                               |
-| Start            | `MAP_FILE=docs/examples/software-quality.map.md npm run dev:all` |
+| Check             | Command                                                          |
+| ----------------- | ---------------------------------------------------------------- |
+| Build             | `npm run build`                                                  |
+| Type check        | `npm run typecheck`                                              |
+| Lint              | `npm run lint`                                                   |
+| Dependency rules  | `npm run depcruise`                                              |
+| Test              | `npm test`                                                       |
+| E2E               | `npm run test:e2e`                                               |
+| Start             | `MAP_FILE=docs/examples/software-quality.map.md npm run dev:all` |
+| Start with picker | `MAPS_DIR=docs/examples npm run dev:all`                         |
 
 ## Tasks
 
@@ -523,8 +675,8 @@ Acceptance criteria:
 
 **Phase 3: file binding**
 
-- [ ] Implement `FsPort` with `NodeFsPort` and `MemoryFsPort`
-- [ ] Implement `openMapFile()`: load, and create a missing file (D11)
+- [ ] Implement `FsPort` with `NodeFsPort` and `MemoryFsPort`, including `listDir()` and `realpath()`
+- [ ] Implement `openMapFile()`: load, and create a new file with `create: true` (D11)
 - [ ] Implement `MapFileBinding` writes: write-through with coalescing and atomic replace (D6, D8)
 - [ ] Implement `checkDisk()`, watch, poll and the state machine (D5, D7, D10)
 - [ ] Skip writes for batches that change only `collapsed` (D4)
@@ -542,9 +694,11 @@ Acceptance criteria:
 
 **Phase 4: server, protocol and MCP**
 
-- [ ] `main.ts` reads `MAP_FILE` and calls `openMapFile()` before `listen()`, and closes the binding on `SIGINT` and `SIGTERM` (D11)
-- [ ] `buildServer()` takes the binding. `syncRoutes` sends `file` in `snapshot` and on changes, and handles `writeFile`
-- [ ] MCP change tools wait for `flush()` and return the diagnostics in `invalid` or `missing` (D6, D10)
+- [ ] Implement `MapWorkspace`: `listDir()` with the filter, `open()` with the root and suffix checks and the switch, one `open()` at a time (D11)
+- [ ] `main.ts` creates the workspace for `MAPS_DIR`, opens `MAP_FILE` if set before `listen()`, and closes the workspace on `SIGINT` and `SIGTERM` (D11)
+- [ ] `buildServer()` takes the workspace. Add `GET /api/files` and `POST /api/map/open` with the errors in [The user picks and opens a map file](#the-user-picks-and-opens-a-map-file)
+- [ ] `syncRoutes` sends `file` in `snapshot` and on changes, sends `file: null` while no file is open, sends `snapshot` to all clients after an open, and handles `writeFile`
+- [ ] MCP change tools wait for `flush()` and return the diagnostics in `invalid` or `missing` (D6, D10). All map tools return the no-file error while no file is open
 - [ ] Add `note` to `get_topic` and `update_topic`. Add the `get_map_info` tool
 - [ ] Add tests for the code of this phase
 
@@ -553,22 +707,33 @@ Acceptance criteria:
 - [ ] `npm test` passes, including `sync.test.ts` and `tools.test.ts` cases for file state and notes
 - [ ] After an `add_topics` call returns, the file contains the new topics
 - [ ] A test edits the file on disk, and a connected sync client receives the change as a `patch`
+- [ ] `POST /api/map/open` rejects a path outside `MAPS_DIR`, including a `..` path and a symlink that points outside
+- [ ] After an open, a connected sync client receives a `snapshot` with the new file and a new `rootId`
+- [ ] `GET /api/files` lists subdirectories and `*.map.md` files only, and hides `.git` and `node_modules`
 
 **Phase 5: GUI**
 
 - [ ] `connectSync` passes `FileState` to the app. `App.tsx` shows "Saved" or "Saving…" next to the sync badge
 - [ ] Add `FileStatusBanner` for `invalid` and `missing`, with the diagnostics and the "Write the app version to the file" action
-- [ ] Add tests for the code of this phase (syncClient test for the `file` message, Storybook story for the banner)
+- [ ] Add `MapFilePicker`: directory navigation with parent and breadcrumbs relative to the root, file list, "New map" name field, and the confirmation for `invalid` and `missing` (D11)
+- [ ] Add `lastMapFile.ts`. `connectSync` stores the path of each opened file, and reopens the stored path when the server has no open file (D11)
+- [ ] `App.tsx` shows the picker while no file is open. The toolbar gets an "Open…" button and shows the absolute path of the open file
+- [ ] Add tests for the code of this phase (syncClient test for the `file` message, Storybook stories for the banner and the picker)
 
 Acceptance criteria:
 
 - [ ] `npm test` passes, including the `file` message case in `syncClient` tests
-- [ ] `npm run test:storybook:ci` passes, including the `FileStatusBanner` stories
+- [ ] `npm run test:storybook:ci` passes, including the `FileStatusBanner` and `MapFilePicker` stories
+- [ ] The picker cannot be dismissed while no file is open
+- [ ] A stored path that returns 404 clears the key and shows the picker
+- [ ] A stored path is not sent while the server has a file open
 
 **Phase E2E:**
 
 - [ ] Add an E2E test: a file edit on disk appears in the open app
 - [ ] Add an E2E test: a GUI edit appears in the file
+- [ ] Add an E2E test: the user opens a map file from the picker, and the map shows its topics
+- [ ] Add an E2E test: after a server restart without `MAP_FILE`, a reload of the page reopens the last file
 
 Acceptance criteria:
 
@@ -584,3 +749,4 @@ Acceptance criteria:
 
 - [ ] Every command in `## Verification` passes
 - [ ] The application starts with the Start command and shows the example map
+- [ ] The application starts with the "Start with picker" command, shows the picker, and opens `software-quality.map.md` from it
