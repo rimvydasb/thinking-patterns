@@ -1,5 +1,8 @@
 import {defineConfig, devices} from '@playwright/test';
 
+/** Port of the MCP/sync server started for the e2e run (kept apart from a dev server on 3001). */
+export const E2E_SERVER_PORT = 3012;
+
 /** GUI tests for the stand-alone app only (Storybook stories are covered by play functions). */
 export default defineConfig({
     testDir: './e2e',
@@ -12,9 +15,16 @@ export default defineConfig({
         trace: 'retain-on-failure',
     },
     projects: [{name: 'chromium', use: {...devices['Desktop Chrome']}}],
-    webServer: {
-        command: 'npm run dev -- --port 5174 --strictPort',
-        url: 'http://localhost:5174',
-        reuseExistingServer: !process.env.CI,
-    },
+    webServer: [
+        {
+            command: `PORT=${E2E_SERVER_PORT} LOG_LEVEL=warn npm run server:start`,
+            url: `http://127.0.0.1:${E2E_SERVER_PORT}/api/health`,
+            reuseExistingServer: !process.env.CI,
+        },
+        {
+            command: `SERVER_URL=http://127.0.0.1:${E2E_SERVER_PORT} npm run dev -- --port 5174 --strictPort`,
+            url: 'http://localhost:5174',
+            reuseExistingServer: !process.env.CI,
+        },
+    ],
 });

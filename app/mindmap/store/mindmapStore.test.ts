@@ -1,3 +1,4 @@
+import {applyOps} from '../model/ops';
 import {fromOutline} from '../model/tree';
 import {createMindMapStore} from './mindmapStore';
 
@@ -58,5 +59,39 @@ describe('mind map store', () => {
         s.getState().setLayout('org');
         s.getState().navigate('ArrowDown');
         expect(s.getState().selectedId).toBe('root.0');
+    });
+});
+
+describe('remote changes', () => {
+    it('apply without entering the undo history and keep local undo working', () => {
+        const s = make();
+        s.getState().select('root.1');
+        s.getState().startEditing('root.1');
+        s.getState().commitEdit('Bee'); // local edit
+        const remote = [{op: 'add' as const, id: 'agent', parentId: 'root', index: 0, text: 'From agent'}];
+        s.getState().applyRemote(applyOps(s.getState().tree, remote).tree, remote);
+        expect(s.getState().tree.nodes.agent.text).toBe('From agent');
+
+        s.getState().undo(); // reverts only the local edit
+        expect(s.getState().tree.nodes['root.1'].text).toBe('B');
+        expect(s.getState().tree.nodes.agent).toBeDefined();
+        expect(s.getState().past).toHaveLength(0);
+    });
+
+    it('fixes the selection and the editor when the topic disappears', () => {
+        const s = make();
+        s.getState().startEditing('root.0.0');
+        const ops = [{op: 'remove' as const, id: 'root.0'}];
+        s.getState().applyRemote(applyOps(s.getState().tree, ops).tree, ops);
+        expect(s.getState().selectedId).toBe('root');
+        expect(s.getState().editing).toBeNull();
+    });
+
+    it('clears the history when replacing the content', () => {
+        const s = make();
+        s.getState().addChild();
+        s.getState().applyRemote(fromOutline({text: 'New'}), null);
+        expect(s.getState().past).toEqual([]);
+        expect(s.getState().tree.nodes.root.text).toBe('New');
     });
 });

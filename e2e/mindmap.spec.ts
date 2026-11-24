@@ -15,7 +15,7 @@ async function box(l: Locator) {
 }
 
 async function open(page: Page, query = '') {
-    await page.goto(`/${query}`);
+    await page.goto(`/${query}${query ? '&' : '?'}offline`);
     await expect(topics(page).first()).toBeVisible();
     await expect(page.getByTestId('mindmap')).toBeFocused();
 }

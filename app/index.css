@@ -1,0 +1,30 @@
+html,
+body,
+#root {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.app-sync {
+  position: fixed;
+  top: 12px;
+  right: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font:
+    12px/1.6 system-ui,
+    sans-serif;
+  color: #fff;
+  pointer-events: none;
+}
+.app-sync--online {
+  background: #2e9d5b;
+}
+.app-sync--connecting {
+  background: #c98a12;
+}
+.app-sync--offline {
+  background: #8a8f98;
+}

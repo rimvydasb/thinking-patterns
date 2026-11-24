@@ -16,5 +16,5 @@
     "noEmit": true,
     "types": ["jest", "node"]
   },
-  "include": ["src", "e2e", ".storybook", "vite.config.ts", "playwright.config.ts"]
+  "include": ["app", "server", "e2e", ".storybook", "vite.config.ts", "playwright.config.ts"]
 }

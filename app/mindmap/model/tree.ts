@@ -1,10 +1,14 @@
 import type {LayoutKind, MindMapTree, MindNode, NodeId, Outline, Side} from './types';
 
 let idCounter = 0;
-/** Unique-enough ids for an in-memory MVP. */
+/**
+ * Unique-enough ids. The app and the server both create ids for the same map, so a random part keeps
+ * two processes that start in the same millisecond from producing equal ids.
+ */
 export function newId(): NodeId {
     idCounter += 1;
-    return `n${Date.now().toString(36)}${idCounter.toString(36)}`;
+    const random = Math.random().toString(36).slice(2, 7);
+    return `n${Date.now().toString(36)}${idCounter.toString(36)}${random}`;
 }
 
 // ---------------------------------------------------------------------------

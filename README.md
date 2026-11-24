@@ -1,26 +1,36 @@
 # Thinking Patterns – MindMap MVP
 
-In-memory mind map editor built with React, React Flow, ELK.js and Zustand. See [docs/mindmap-spec.md](docs/mindmap-spec.md).
+Mind map editor built with React, React Flow, ELK.js and Zustand, with a Fastify server that exposes the maps to AI agents over MCP and pushes their changes live to the app. See [docs/mindmap-spec.md](docs/mindmap-spec.md) and [docs/mcp-server-spec.md](docs/mcp-server-spec.md).
 
 ## Run
 
 ```sh
 npm install
-npm run dev          # stand-alone app at http://localhost:5173
+npm run dev:all      # MCP/sync server on :3001 + app at http://localhost:5173 (live sync)
+npm run dev          # app only (works offline, retries the server in the background)
+npm run server       # server only, MCP endpoint http://localhost:3001/mcp
 npm run storybook    # 5 example stories at http://localhost:6006
 ```
 
-The app accepts `?sample=software-factory|product-launch|organisation|thinking-patterns` and `?layout=mindmap|logic|org`.
+The app syncs its map with the server by default. It accepts `?sample=software-factory|product-launch|organisation|thinking-patterns` or `?offline` (in-memory, no server), and `?layout=mindmap|logic|org`.
+
+## MCP
+
+Claude Code picks up the server from [.mcp.json](.mcp.json) while `npm run server` runs. For other clients: `claude mcp add --transport http thinking-patterns http://localhost:3001/mcp`.
+
+The agent works on the one map the user has open. It names topics by text (`topicName`) or, when the text is not unique, by path (`topicPath`, e.g. `["Plan", "Product", "Risks"]`); an ambiguous name returns a question listing every matching path.
+
+Tools: `get_topic`, `search_topics`, `get_selection`, `add_topics`, `update_topic`, `move_topic`, `delete_topics`, `group_topics`, `replace_map`, `focus_topic`. See [docs/mcp-server-spec.md](docs/mcp-server-spec.md).
 
 ## Test
 
-| Command                     | What                                                                  |
-| --------------------------- | --------------------------------------------------------------------- |
-| `npm test`                  | Jest unit tests: tree model, ELK layout, measurement, store           |
-| `npm run test:e2e`          | Playwright GUI tests against the stand-alone app (starts Vite itself) |
-| `npm run test:storybook`    | Story play functions against a running `npm run storybook`            |
-| `npm run test:storybook:ci` | Builds Storybook, serves it and runs the play functions               |
-| `npm run test:all`          | Typecheck + all of the above                                          |
+| Command                     | What                                                                   |
+| --------------------------- | ---------------------------------------------------------------------- |
+| `npm test`                  | Jest: model, ops/diff, layout, store, server map, MCP tools, live sync |
+| `npm run test:e2e`          | Playwright GUI tests (starts the server and Vite itself)               |
+| `npm run test:storybook`    | Story play functions against a running `npm run storybook`             |
+| `npm run test:storybook:ci` | Builds Storybook, serves it and runs the play functions                |
+| `npm run test:all`          | Typecheck + all of the above                                           |
 
 ## Shortcuts (XMind-style)
 
@@ -39,12 +49,18 @@ The app accepts `?sample=software-factory|product-launch|organisation|thinking-p
 ## Structure
 
 ```
-src/mindmap/
-  model/       pure, immutable tree operations + keyboard navigation (no React)
+app/mindmap/
+  model/       pure tree operations, MapOp ops + diff, Markdown lists (shared with the server)
   layout/      ELK.js auto-layout, text measurement, colours
   store/       Zustand store (selection, editing, undo/redo)
   components/  MindMap (React Flow canvas), TopicNode, BranchEdge, Toolbar
+  sync/        WebSocket protocol + sync client (optimistic edits, rebase, reconnect)
   MindMap.stories.tsx
+server/
+  map/         MapDocument: the open map in memory (source of truth, versions, change events)
+  mcp/         MCP tools, topic name/path resolution, Streamable HTTP route (POST /mcp)
+  sync/        WebSocket /api/sync that pushes changes to the app
+  api/         GET /api/health, /api/map
 e2e/           Playwright tests for the app
 ```
 

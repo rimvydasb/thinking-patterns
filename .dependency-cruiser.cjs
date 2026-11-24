@@ -59,7 +59,7 @@ module.exports = {
       name: 'not-to-dev-dep',
       comment: 'Production code imports a devDependency. Move the package to dependencies, or stop importing it.',
       severity: 'error',
-      from: {path: '^src', pathNot: '\\.(spec|test|stories)\\.(js|mjs|cjs|ts|tsx)$|(^|/)(__tests__|testing)/'},
+      from: {path: '^(app|server)', pathNot: '\\.(spec|test|stories)\\.(js|mjs|cjs|ts|tsx)$|(^|/)(__tests__|testing)/'},
       to: {dependencyTypes: ['npm-dev'], dependencyTypesNot: ['type-only']},
     },
     {
@@ -73,11 +73,29 @@ module.exports = {
       name: 'not-to-test',
       comment: 'Production code imports test code. Move the shared code out of the test folder.',
       severity: 'error',
-      from: {path: '^src', pathNot: '\\.(spec|test|stories)\\.(js|mjs|cjs|ts|tsx)$|(^|/)(__tests__|testing)/'},
+      from: {path: '^(app|server)', pathNot: '\\.(spec|test|stories)\\.(js|mjs|cjs|ts|tsx)$|(^|/)(__tests__|testing)/'},
       to: {path: '\\.(spec|test)\\.(js|mjs|cjs|ts|tsx)$|(^|/)__tests__/'},
     },
 
     // --- Project rules -------------------------------------------------------------------------------------------
+    {
+      name: 'app-not-to-server',
+      comment:
+        'The app runs in the browser and talks to the server only over HTTP/WebSocket. Do not import server code.',
+      severity: 'error',
+      from: {path: '^app/'},
+      to: {path: '^server/'},
+    },
+    {
+      name: 'server-only-to-app-model-and-protocol',
+      comment:
+        'The server may share only the pure model (app/mindmap/model) and the sync protocol types with the app. ' +
+        'Move shared code there; never import React, store or UI code into the server.',
+      severity: 'error',
+      // Server tests may drive the real app sync client and store end to end.
+      from: {path: '^server/', pathNot: '/__tests__/'},
+      to: {path: '^app/', pathNot: '^app/mindmap/(model/[^/]+\\.ts|sync/protocol\\.ts)$'},
+    },
   ],
   options: {
     exclude: {

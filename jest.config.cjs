@@ -1,7 +1,7 @@
-/** Jest runs unit tests for pure utilities (model, layout). */
+/** Jest runs unit tests (model, layout, store, sync client) and server tests (registry, MCP tools, sync). */
 module.exports = {
   testEnvironment: 'node',
-  roots: ['<rootDir>/src'],
+  roots: ['<rootDir>/app', '<rootDir>/server'],
   testMatch: ['**/*.test.ts'],
   transform: {
     '^.+\\.tsx?$': [

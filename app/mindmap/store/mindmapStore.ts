@@ -1,5 +1,6 @@
 import {createContext, useContext} from 'react';
 import {createStore, useStore, type StoreApi} from 'zustand';
+import {applyOps, type MapOp} from '../model/ops';
 import * as T from '../model/tree';
 import type {ArrowKey} from '../model/tree';
 import type {LayoutKind, MindMapTree, NodeId} from '../model/types';
@@ -35,6 +36,12 @@ export interface MindMapState {
     redo(): void;
     setLayout(layout: LayoutKind): void;
     setTree(tree: MindMapTree): void;
+    /**
+     * Shows a change that someone else made (server, agent). It is not recorded for undo: `ops` are replayed on
+     * the undo/redo history, so undo reverts only the user's own edits. `ops: null` replaces the content and
+     * clears the history.
+     */
+    applyRemote(tree: MindMapTree, ops: readonly MapOp[] | null): void;
 }
 
 export type MindMapStore = StoreApi<MindMapState>;
@@ -165,6 +172,18 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
             setLayout: (layout) => set({layout}),
 
             setTree: (tree) => commit(tree, {selectedId: tree.rootId, editing: null}),
+
+            applyRemote: (tree, ops) => {
+                const {past, future, selectedId, editing} = get();
+                const replay = (t: MindMapTree) => (t.rootId === tree.rootId ? applyOps(t, ops ?? []).tree : t);
+                set({
+                    tree,
+                    past: ops ? past.map(replay) : [],
+                    future: ops ? future.map(replay) : [],
+                    selectedId: safeSelection(tree, selectedId),
+                    editing: editing && tree.nodes[editing.id] ? editing : null,
+                });
+            },
         };
     });
 }
