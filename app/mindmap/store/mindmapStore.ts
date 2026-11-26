@@ -19,7 +19,13 @@ export interface EditingState {
 export interface MindMapState {
     tree: MindMapTree;
     layout: LayoutKind;
+    /** The focused topic: keyboard actions, editing and the toolbar act on it. */
     selectedId: NodeId;
+    /**
+     * All selected topics (Ctrl/Cmd+click adds more), in the order they were selected. Always contains `selectedId`.
+     * Selecting a topic any other way (click, arrows, new topic) makes it the only selected one again.
+     */
+    selectedIds: readonly NodeId[];
     editing: EditingState | null;
     past: MindMapTree[];
     future: MindMapTree[];
@@ -27,6 +33,8 @@ export interface MindMapState {
     generating: Readonly<Record<NodeId, true>>;
 
     select(id: NodeId): void;
+    /** Adds a topic to the selection, or removes it if it is already selected (Ctrl/Cmd+click). */
+    toggleSelect(id: NodeId): void;
     navigate(key: ArrowKey): void;
     startEditing(id?: NodeId, seed?: string | null): void;
     commitEdit(text: string): void;
@@ -49,6 +57,13 @@ export interface MindMapState {
     deleteSelected(): void;
     toggleCollapse(id?: NodeId): void;
     moveSelected(delta: number): void;
+    /** Re-parents a topic (with its subtree) as the last child of `parentId`, and selects it. Refuses cycles. */
+    moveTopic(id: NodeId, parentId: NodeId): void;
+    /**
+     * Moves several topics under `parentId` in one undo step, keeping their map order. Topics inside another moved
+     * topic go along with it; topics that already are children of `parentId`, or would create a cycle, are skipped.
+     */
+    moveTopics(ids: readonly NodeId[], parentId: NodeId): void;
     undo(): void;
     redo(): void;
     setLayout(layout: LayoutKind): void;
@@ -71,7 +86,26 @@ export interface CreateStoreOptions {
 
 export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore {
     const initial = opts.tree ?? T.createTree();
-    return createStore<MindMapState>()((set, get) => {
+    return createStore<MindMapState>()((rawSet, get) => {
+        /**
+         * Sets state and keeps the selection consistent: a new `selectedId` (without explicit `selectedIds`) resets
+         * the selection to that topic, and selected topics that were removed or hidden are dropped.
+         */
+        const set = (patch: Partial<MindMapState>) => {
+            const s = get();
+            const tree = patch.tree ?? s.tree;
+            const selectedId = patch.selectedId ?? s.selectedId;
+            let ids = patch.selectedIds ?? (selectedId === s.selectedId ? s.selectedIds : [selectedId]);
+            if (patch.tree || patch.selectedIds)
+                ids = ids.filter((id) => tree.nodes[id] && safeSelection(tree, id) === id);
+            if (!ids.includes(selectedId)) ids = [...ids, selectedId];
+            rawSet(
+                ids.length === s.selectedIds.length && ids.every((id, i) => id === s.selectedIds[i])
+                    ? patch
+                    : {...patch, selectedIds: ids},
+            );
+        };
+
         /** Applies a tree change and records it for undo. */
         const commit = (tree: MindMapTree, patch: Partial<MindMapState> = {}) => {
             const s = get();
@@ -94,13 +128,22 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
             tree: initial,
             layout: opts.layout ?? 'mindmap',
             selectedId: opts.selectedId && initial.nodes[opts.selectedId] ? opts.selectedId : initial.rootId,
+            selectedIds: [opts.selectedId && initial.nodes[opts.selectedId] ? opts.selectedId : initial.rootId],
             editing: null,
             past: [],
             future: [],
             generating: {},
 
             select: (id) => {
-                if (get().tree.nodes[id]) set({selectedId: id});
+                if (get().tree.nodes[id]) set({selectedId: id, selectedIds: [id]});
+            },
+
+            toggleSelect: (id) => {
+                const {tree, selectedIds} = get();
+                if (!tree.nodes[id]) return;
+                if (!selectedIds.includes(id)) return set({selectedId: id, selectedIds: [...selectedIds, id]});
+                const rest = selectedIds.filter((x) => x !== id);
+                if (rest.length) set({selectedId: rest[rest.length - 1], selectedIds: rest});
             },
 
             navigate: (key) => {
@@ -188,6 +231,38 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
             moveSelected: (delta) => {
                 const {tree, selectedId} = get();
                 commit(T.moveAmongSiblings(tree, selectedId, delta));
+            },
+
+            moveTopic: (id, parentId) => {
+                const {tree} = get();
+                if (!tree.nodes[id] || !tree.nodes[parentId] || tree.nodes[id].parentId === parentId) return;
+                commit(T.moveNode(tree, id, parentId), {selectedId: id, editing: null});
+            },
+
+            moveTopics: (ids, parentId) => {
+                const {tree} = get();
+                if (!tree.nodes[parentId]) return;
+                const chosen = new Set(ids.filter((id) => tree.nodes[id]));
+                // Pre-order, so the moved topics keep the order they have in the map.
+                const preorder: NodeId[] = [];
+                const visit = (id: NodeId) => {
+                    preorder.push(id);
+                    tree.nodes[id].children.forEach(visit);
+                };
+                visit(tree.rootId);
+                const top = preorder.filter(
+                    (id) =>
+                        chosen.has(id) &&
+                        !T.pathTo(tree, id)
+                            .slice(0, -1)
+                            .some((a) => chosen.has(a)),
+                );
+                let next = tree;
+                for (const id of top) {
+                    if (next.nodes[id].parentId === parentId) continue;
+                    next = T.moveNode(next, id, parentId);
+                }
+                commit(next, {editing: null});
             },
 
             undo: () => {

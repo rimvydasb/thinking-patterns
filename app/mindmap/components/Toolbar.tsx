@@ -130,9 +130,11 @@ const shortcuts = (generate: boolean): [string, string][] => [
     ['F2 / Space / type', 'Edit text'],
     ['Arrows', 'Move selection'],
     ['Alt+Arrows', 'Reorder siblings'],
+    [`${MOD}+Click`, 'Add to / remove from selection'],
+    ['Drag onto topic', 'Move selected topics there'],
     [`${MOD}+/`, 'Collapse / expand'],
     [`${MOD}+Z / ${MOD}+Shift+Z`, 'Undo / redo'],
-    ['Esc', 'Cancel editing'],
+    ['Esc', 'Cancel editing / clear multi-selection'],
 ];
 
 export function ShortcutHelp({generate = false}: {generate?: boolean}) {

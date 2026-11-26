@@ -181,6 +181,95 @@ test.describe('selection and structure', () => {
         }).toPass();
     });
 
+    test('dragging a topic onto another moves it there with its subtree', async ({page}) => {
+        await open(page, '?sample=software-factory&layout=logic');
+        const dragged = topic(page, 'Software Quality Attributes');
+        const target = topic(page, 'Events');
+        await expect(dragged).toHaveAttribute('data-depth', '1');
+        await expect(topic(page, 'Security')).toHaveAttribute('data-depth', '2');
+
+        const from = await box(dragged);
+        const to = await box(target);
+        await page.mouse.move(from.cx, from.cy);
+        await page.mouse.down();
+        await page.mouse.move(from.cx + 10, from.cy + 10, {steps: 3});
+        await page.mouse.move(to.cx, to.cy, {steps: 10});
+        await expect(target).toHaveAttribute('data-drop-target', 'true');
+        await page.mouse.up();
+
+        await expect(dragged).toHaveAttribute('data-depth', '2');
+        await expect(topic(page, 'Security')).toHaveAttribute('data-depth', '3');
+        await expect(selected(page)).toHaveText('Software Quality Attributes');
+        await expect(topics(page)).toHaveCount(16);
+
+        await page.keyboard.press(`${MOD}+z`);
+        await expect(dragged).toHaveAttribute('data-depth', '1');
+    });
+
+    test('dropping a topic on empty canvas leaves the map unchanged', async ({page}) => {
+        await open(page, '?sample=software-factory&layout=logic');
+        const dragged = topic(page, 'Events');
+        const root = topic(page, 'Software Factory');
+        // Relative to the parent: selecting the dropped topic may pan the view.
+        const offset = async () => (await box(dragged)).cy - (await box(root)).cy;
+        const before = await offset();
+        const from = await box(dragged);
+        await page.mouse.move(from.cx, from.cy);
+        await page.mouse.down();
+        await page.mouse.move(from.cx + 10, from.cy + 200, {steps: 10});
+        await page.mouse.up();
+        await expect(dragged).toHaveAttribute('data-depth', '1');
+        await expect(async () => expect(Math.abs((await offset()) - before)).toBeLessThan(2)).toPass();
+    });
+
+    test('Ctrl/Cmd+click builds a multi-selection; a plain click or Esc resets it', async ({page}) => {
+        await open(page, '?sample=software-factory&layout=logic');
+        await topic(page, 'Security').click();
+        await topic(page, 'Events').click({modifiers: ['ControlOrMeta']});
+        await topic(page, 'Loops').click({modifiers: ['ControlOrMeta']});
+        await expect(selected(page)).toHaveCount(3);
+        await topic(page, 'Events').click({modifiers: ['ControlOrMeta']});
+        await expect(selected(page)).toHaveCount(2);
+        await page.keyboard.press('Escape');
+        await expect(selected(page)).toHaveCount(1);
+        await expect(selected(page)).toHaveText('Loops');
+
+        await topic(page, 'Events').click({modifiers: ['ControlOrMeta']});
+        await topic(page, 'Security').click();
+        await expect(selected(page)).toHaveCount(1);
+        await expect(selected(page)).toHaveText('Security');
+    });
+
+    test('dragging one of several selected topics moves them all', async ({page}) => {
+        await open(page, '?sample=software-factory&layout=logic');
+        await topic(page, 'Security').click();
+        await topic(page, 'Loops').click({modifiers: ['ControlOrMeta']});
+        const target = topic(page, 'Events');
+
+        const from = await box(topic(page, 'Loops'));
+        const to = await box(target);
+        await page.mouse.move(from.cx, from.cy);
+        await page.mouse.down();
+        await page.mouse.move(from.cx + 10, from.cy + 10, {steps: 3});
+        await page.mouse.move(to.cx, to.cy, {steps: 10});
+        await expect(target).toHaveAttribute('data-drop-target', 'true');
+        await expect(topic(page, 'Security')).toHaveClass(/is-dragging/);
+        await page.mouse.up();
+
+        await expect(topic(page, 'Loops')).toHaveAttribute('data-depth', '2');
+        await expect(topic(page, 'Security')).toHaveAttribute('data-depth', '2');
+        await expect(selected(page)).toHaveCount(2);
+
+        await page.keyboard.press(`${MOD}+z`);
+        await expect(topic(page, 'Loops')).toHaveAttribute('data-depth', '1');
+        await expect(topic(page, 'Security')).toHaveAttribute('data-depth', '2');
+        await expect(async () => {
+            const sec = await box(topic(page, 'Security'));
+            const qa = await box(topic(page, 'Software Quality Attributes'));
+            expect(sec.x).toBeGreaterThan(qa.x + qa.width);
+        }).toPass();
+    });
+
     test('collapse hides descendants and the badge expands them', async ({page}) => {
         await open(page, '?sample=software-factory&layout=logic');
         await topic(page, 'Software Quality Attributes').click();

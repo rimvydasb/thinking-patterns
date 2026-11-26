@@ -31,6 +31,10 @@
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2f80ed;
 }
 
+.mm-topic.is-selected.is-primary {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2f80ed, 0 0 0 7px rgba(47, 128, 237, 0.3);
+}
+
 .mm-topic.is-editing {
   box-shadow: 0 0 0 2px #fff, 0 0 0 4px #2f80ed, 0 6px 18px rgba(0, 0, 0, 0.15);
   z-index: 10;
@@ -60,6 +64,23 @@
   background: #fff;
   font: 600 10px/15px -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   cursor: pointer;
+}
+
+/* Drag a topic onto another one to move it there. */
+.react-flow__node.draggable .mm-topic {
+  cursor: grab;
+}
+
+.mm-root[data-dragging] .mm-topic {
+  cursor: grabbing;
+}
+
+.mm-topic.is-dragging {
+  opacity: 0.6;
+}
+
+.mm-topic.is-drop-target {
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #27ae60, 0 0 0 8px rgba(39, 174, 96, 0.25);
 }
 
 /* A topic whose name is being generated (AI). */

@@ -9,12 +9,13 @@ import {
     useReactFlow,
     type EdgeTypes,
     type NodeTypes,
+    type OnNodeDrag,
 } from '@xyflow/react';
 import {useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type ReactNode} from 'react';
 import {computeLayout, withProvisionalNodes, type LayoutResult} from '../layout/elkLayout';
 import {topicColors} from '../layout/theme';
-import {branchIndex, fromOutline, getNode, hiddenDescendantCount, sideOf} from '../model/tree';
-import type {LayoutKind, MindMapTree, Outline, Side} from '../model/types';
+import {branchIndex, fromOutline, getNode, hiddenDescendantCount, sideOf, subtreeIds} from '../model/tree';
+import type {LayoutKind, MindMapTree, NodeId, Outline, Side} from '../model/types';
 import {
     createMindMapStore,
     MindMapStoreContext,
@@ -72,6 +73,26 @@ export function MindMap({initialTree, initialLayout, store: external, ...rest}: 
     );
 }
 
+/** Topics being dragged onto another topic to re-parent them. */
+interface DragState {
+    /** The topic under the pointer. */
+    id: NodeId;
+    /** The topics to move: the dragged one, or the whole selection when the dragged topic is part of it. */
+    ids: readonly NodeId[];
+    /** The moved topics and their visible descendants; they move together and cannot be drop targets. */
+    moving: ReadonlySet<NodeId>;
+    dx: number;
+    dy: number;
+    /** Topic under the pointer that would become the new parent, if the drop is valid. */
+    targetId: NodeId | null;
+}
+
+function pointerOf(e: MouseEvent | TouchEvent): {x: number; y: number} | null {
+    if ('clientX' in e) return {x: e.clientX, y: e.clientY};
+    const t = e.touches[0] ?? e.changedTouches[0];
+    return t ? {x: t.clientX, y: t.clientY} : null;
+}
+
 function useAutoLayout(): {result: LayoutResult | null; version: number} {
     const tree = useMindMap((s) => s.tree);
     const layout = useMindMap((s) => s.layout);
@@ -105,6 +126,7 @@ function MindMapCanvas({
     const tree = useMindMap((s) => s.tree);
     const layout = useMindMap((s) => s.layout);
     const selectedId = useMindMap((s) => s.selectedId);
+    const selectedIds = useMindMap((s) => s.selectedIds);
     const editing = useMindMap((s) => s.editing);
     const generating = useMindMap((s) => s.generating);
     const {result: computed, version} = useAutoLayout();
@@ -114,18 +136,25 @@ function MindMapCanvas({
     );
     const rootRef = useRef<HTMLDivElement>(null);
     const flow = useReactFlow();
+    const [drag, setDrag] = useState<DragState | null>(null);
+    /** When a macOS Ctrl+click (context menu event) last toggled the selection, so a following click is ignored. */
+    const ctrlMenuAt = useRef(0);
 
     const nodes = useMemo<TopicNodeType[]>(() => {
         if (!result) return [];
         return Object.values(result.nodes).map((p) => {
             const n = getNode(tree, p.id);
+            const moving = !!drag?.moving.has(p.id);
             return {
                 id: p.id,
                 type: 'topic' as const,
-                position: {x: p.x, y: p.y},
+                position: moving ? {x: p.x + drag!.dx, y: p.y + drag!.dy} : {x: p.x, y: p.y},
                 width: p.width,
                 height: p.height,
-                draggable: false,
+                // Sizes come from the layout; React Flow needs them to drag without onNodesChange.
+                measured: {width: p.width, height: p.height},
+                draggable: p.id !== tree.rootId && !editing,
+                zIndex: moving ? 1000 : undefined,
                 selectable: false,
                 focusable: false,
                 data: {
@@ -134,15 +163,65 @@ function MindMapCanvas({
                     branch: branchIndex(tree, p.id),
                     side: p.side,
                     childSide: p.side ?? sideOf(tree, p.id, layout),
-                    selected: p.id === selectedId,
+                    selected: selectedIds.includes(p.id),
+                    primary: p.id === selectedId && selectedIds.length > 1,
                     editing: editing?.id === p.id,
                     editSeed: editing?.id === p.id ? editing.seed : null,
                     hiddenCount: hiddenDescendantCount(tree, p.id),
                     generating: !!generating[p.id],
+                    dragging: moving,
+                    dropTarget: drag?.targetId === p.id,
                 },
             };
         });
-    }, [result, tree, layout, selectedId, editing, generating]);
+    }, [result, tree, layout, selectedId, selectedIds, editing, generating, drag]);
+
+    /**
+     * The topic under the pointer that the dragged topics may be moved under: not one of them or their descendants,
+     * and not a topic that already is the parent of all of them.
+     */
+    const dropTargetAt = (e: MouseEvent | TouchEvent, d: Pick<DragState, 'ids' | 'moving'>): NodeId | null => {
+        const pointer = pointerOf(e);
+        if (!result || !pointer) return null;
+        const {x, y} = flow.screenToFlowPosition(pointer);
+        const hit = Object.values(result.nodes).find(
+            (p) => !d.moving.has(p.id) && x >= p.x && x <= p.x + p.width && y >= p.y && y <= p.y + p.height,
+        );
+        if (!hit || d.ids.every((id) => tree.nodes[id]?.parentId === hit.id)) return null;
+        return hit.id;
+    };
+
+    const onNodeDragStart: OnNodeDrag<TopicNodeType> = (_, node) => {
+        if (!result || !tree.nodes[node.id]) return;
+        const group = selectedIds.length > 1 && selectedIds.includes(node.id);
+        const ids = group ? selectedIds.filter((id) => id !== tree.rootId) : [node.id];
+        const moving = new Set(ids.flatMap((id) => subtreeIds(tree, id)).filter((id) => result.nodes[id]));
+        setDrag({id: node.id, ids, moving, dx: 0, dy: 0, targetId: null});
+    };
+
+    const onNodeDrag: OnNodeDrag<TopicNodeType> = (e, node) => {
+        const origin = result?.nodes[node.id];
+        if (!drag || drag.id !== node.id || !origin) return;
+        setDrag({
+            ...drag,
+            dx: node.position.x - origin.x,
+            dy: node.position.y - origin.y,
+            targetId: dropTargetAt(e, drag),
+        });
+    };
+
+    const onNodeDragStop: OnNodeDrag<TopicNodeType> = (e, node) => {
+        const d = drag?.id === node.id ? drag : null;
+        const targetId = d ? dropTargetAt(e, d) : null;
+        setDrag(null);
+        const s = store.getState();
+        if (d && d.ids.length > 1) {
+            // The selection stays as it is, so the group can be dragged again.
+            if (targetId) s.moveTopics(d.ids, targetId);
+        } else if (targetId) s.moveTopic(node.id, targetId);
+        else s.select(node.id);
+        rootRef.current?.focus({preventScroll: true});
+    };
 
     const edges = useMemo<BranchEdgeType[]>(() => {
         if (!result) return [];
@@ -245,6 +324,10 @@ function MindMapCanvas({
                 case 'ArrowRight':
                     s.navigate(e.key);
                     break;
+                case 'Escape':
+                    if (s.selectedIds.length > 1) s.select(s.selectedId);
+                    else handled = false;
+                    break;
                 case 'Home':
                     s.select(s.tree.rootId);
                     break;
@@ -271,6 +354,8 @@ function MindMapCanvas({
             data-layout={layout}
             data-layout-version={version}
             data-selected-id={selectedId}
+            aria-multiselectable
+            data-dragging={drag ? 'true' : undefined}
             onKeyDown={onKeyDown}
         >
             <ReactFlow<TopicNodeType, BranchEdgeType>
@@ -278,7 +363,11 @@ function MindMapCanvas({
                 edges={edges}
                 nodeTypes={nodeTypes}
                 edgeTypes={edgeTypes}
-                nodesDraggable={false}
+                nodesDraggable
+                nodeDragThreshold={4}
+                onNodeDragStart={onNodeDragStart}
+                onNodeDrag={onNodeDrag}
+                onNodeDragStop={onNodeDragStop}
                 nodesConnectable={false}
                 nodesFocusable={false}
                 elementsSelectable={false}
@@ -291,9 +380,21 @@ function MindMapCanvas({
                 minZoom={0.1}
                 maxZoom={2.5}
                 proOptions={{hideAttribution: true}}
-                onNodeClick={(_, node) => {
-                    store.getState().select(node.id);
+                onNodeClick={(e, node) => {
+                    const s = store.getState();
+                    if (e.metaKey || e.ctrlKey) {
+                        // macOS turns Ctrl+click into a context menu event (handled below) and may not click.
+                        if (Date.now() - ctrlMenuAt.current > 500) s.toggleSelect(node.id);
+                    } else s.select(node.id);
                     if (!store.getState().editing) rootRef.current?.focus({preventScroll: true});
+                }}
+                onNodeContextMenu={(e, node) => {
+                    // Ctrl+click on macOS: a primary-button context menu event.
+                    if (!e.ctrlKey || e.button !== 0) return;
+                    e.preventDefault();
+                    ctrlMenuAt.current = Date.now();
+                    store.getState().toggleSelect(node.id);
+                    rootRef.current?.focus({preventScroll: true});
                 }}
                 onNodeDoubleClick={(_, node) => store.getState().startEditing(node.id)}
                 onPaneClick={() => rootRef.current?.focus({preventScroll: true})}

@@ -13,11 +13,17 @@ export type TopicNodeData = {
     /** Direction its children grow (for the collapse badge). */
     childSide: Side;
     selected: boolean;
+    /** The focused topic of a multi-selection (keyboard actions apply to it). */
+    primary?: boolean;
     editing: boolean;
     editSeed: string | null;
     hiddenCount: number;
     /** The topic name is being generated. */
     generating: boolean;
+    /** The topic (or an ancestor) is being dragged. */
+    dragging?: boolean;
+    /** The dragged topic would be moved under this one if dropped now. */
+    dropTarget?: boolean;
 };
 
 export type TopicNodeType = Node<TopicNodeData, 'topic'>;
@@ -119,11 +125,12 @@ function TopicNodeComponent({id, data, width, height}: NodeProps<TopicNodeType>)
     return (
         <div
             ref={boxRef}
-            className={`mm-topic mm-topic--d${Math.min(data.depth, 3)}${data.selected ? ' is-selected' : ''}${data.editing ? ' is-editing' : ''}${data.generating ? ' is-generating' : ''}`}
+            className={`mm-topic mm-topic--d${Math.min(data.depth, 3)}${data.selected ? ' is-selected' : ''}${data.primary ? ' is-primary' : ''}${data.editing ? ' is-editing' : ''}${data.generating ? ' is-generating' : ''}${data.dragging ? ' is-dragging' : ''}${data.dropTarget ? ' is-drop-target' : ''}`}
             data-testid="topic"
             data-topic-id={id}
             data-depth={data.depth}
             data-side={data.side ?? 'root'}
+            data-drop-target={data.dropTarget || undefined}
             aria-selected={data.selected}
             aria-busy={data.generating || undefined}
             role="treeitem"

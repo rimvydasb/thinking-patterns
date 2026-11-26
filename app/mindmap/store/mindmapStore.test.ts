@@ -54,6 +54,68 @@ describe('mind map store', () => {
         expect(s.getState().past).toHaveLength(0);
     });
 
+    it('moves a topic under another one as an undoable step', () => {
+        const s = make();
+        s.getState().moveTopic('root.1', 'root.0');
+        const {tree, selectedId} = s.getState();
+        expect(tree.nodes['root.0'].children).toEqual(['root.0.0', 'root.1']);
+        expect(tree.nodes['root.1'].parentId).toBe('root.0');
+        expect(selectedId).toBe('root.1');
+        s.getState().undo();
+        expect(s.getState().tree.nodes['root'].children).toEqual(['root.0', 'root.1']);
+    });
+
+    it('refuses to move a topic into its own subtree or onto its current parent', () => {
+        const s = make();
+        s.getState().moveTopic('root.0', 'root.0.0');
+        s.getState().moveTopic('root.0', 'root');
+        expect(s.getState().past).toHaveLength(0);
+    });
+
+    it('toggles topics in and out of a multi-selection', () => {
+        const s = make();
+        s.getState().select('root.0');
+        s.getState().toggleSelect('root.1');
+        expect(s.getState().selectedIds).toEqual(['root.0', 'root.1']);
+        expect(s.getState().selectedId).toBe('root.1');
+        s.getState().toggleSelect('root.1');
+        expect(s.getState().selectedIds).toEqual(['root.0']);
+        expect(s.getState().selectedId).toBe('root.0');
+        // The last selected topic cannot be toggled off.
+        s.getState().toggleSelect('root.0');
+        expect(s.getState().selectedIds).toEqual(['root.0']);
+    });
+
+    it('resets the multi-selection when the selection moves another way', () => {
+        const s = make();
+        s.getState().select('root.0');
+        s.getState().toggleSelect('root.1');
+        s.getState().navigate('ArrowRight'); // root.1 is on the left: back to the root
+        expect(s.getState().selectedIds).toEqual(['root']);
+    });
+
+    it('drops removed and hidden topics from the multi-selection', () => {
+        const s = make();
+        s.getState().select('root.1');
+        s.getState().toggleSelect('root.0.0');
+        s.getState().toggleSelect('root.0');
+        s.getState().toggleCollapse('root.0');
+        expect(s.getState().selectedIds).toEqual(['root.1', 'root.0']);
+    });
+
+    it('moves several topics in map order as one undo step', () => {
+        const s = createMindMapStore({
+            tree: fromOutline({text: 'R', children: [{text: 'A', children: [{text: 'A1'}]}, {text: 'B'}, {text: 'C'}]}),
+        });
+        s.getState().moveTopics(['root.2', 'root.0', 'root.0.0'], 'root.1');
+        const {tree} = s.getState();
+        expect(tree.nodes['root.1'].children).toEqual(['root.0', 'root.2']);
+        expect(tree.nodes['root.0'].children).toEqual(['root.0.0']);
+        expect(s.getState().past).toHaveLength(1);
+        s.getState().undo();
+        expect(s.getState().tree.nodes['root'].children).toEqual(['root.0', 'root.1', 'root.2']);
+    });
+
     it('navigates using the current layout', () => {
         const s = make();
         s.getState().setLayout('org');
