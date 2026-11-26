@@ -54,21 +54,16 @@ test.describe('creating topics', () => {
         await expect(page.getByTestId('mindmap')).toBeFocused();
     });
 
-    test('Enter adds a sibling after, Shift+Enter before', async ({page}) => {
+    test('Enter adds a sibling after', async ({page}) => {
         await open(page, '?layout=logic');
         await page.keyboard.press('Tab');
-        await typeAndCommit(page, 'B');
-        await page.keyboard.press('Enter');
-        await typeAndCommit(page, 'C');
-        await page.keyboard.press('ArrowUp');
-        await expect(selected(page)).toHaveText('B');
-        await page.keyboard.press('Shift+Enter');
         await typeAndCommit(page, 'A');
+        await page.keyboard.press('Enter');
+        await typeAndCommit(page, 'B');
 
         await expect(async () => {
-            const ys = await Promise.all(['A', 'B', 'C'].map(async (t) => (await box(topic(page, t))).cy));
+            const ys = await Promise.all(['A', 'B'].map(async (t) => (await box(topic(page, t))).cy));
             expect(ys[0]).toBeLessThan(ys[1]);
-            expect(ys[1]).toBeLessThan(ys[2]);
         }).toPass();
     });
 
@@ -265,5 +260,66 @@ test.describe('layouts', () => {
                     expect(overlap, `${q}: topics ${i} and ${j} overlap`).toBe(false);
                 }
         }
+    });
+});
+
+test.describe('AI brainstorming', () => {
+    /** Answers bridge calls with `answers` in turn, each after `delayMs`. */
+    async function mockBridge(page: Page, answers: string[], delayMs = 300) {
+        await page.route('http://127.0.0.1:3456/**', async (route) => {
+            const url = route.request().url();
+            if (url.endsWith('/health')) return route.fulfill({json: {ok: true}});
+            if (url.endsWith('/v1/models')) return route.fulfill({json: {data: [{id: 'haiku'}, {id: 'sonnet'}]}});
+            await new Promise((r) => setTimeout(r, delayMs));
+            await route.fulfill({json: {choices: [{message: {role: 'assistant', content: answers.shift() ?? ''}}]}});
+        });
+    }
+
+    test('shows the bridge status and model in the top-right chip', async ({page}) => {
+        await mockBridge(page, []);
+        await open(page);
+        await expect(page.getByTestId('ai-status')).toHaveAttribute('data-state', 'connected');
+        await expect(page.getByTestId('ai-status')).toHaveText('haiku');
+    });
+
+    test('Shift+Tab and Shift+Enter add topics at once and fill in generated names', async ({page}) => {
+        await mockBridge(page, ['Apple', 'Banana']);
+        await open(page);
+        await page.keyboard.press('Shift+Tab');
+        await expect(topics(page)).toHaveCount(2);
+        await expect(page.getByTestId('topic-spinner')).toHaveCount(1);
+        await expect(page.getByTestId('ai-task')).toContainText('Generating node');
+        await page.keyboard.press('Shift+Enter');
+        await expect(topics(page)).toHaveCount(3);
+
+        await expect(topic(page, 'Apple')).toBeVisible();
+        await expect(topic(page, 'Banana')).toBeVisible();
+        await expect(selected(page)).toHaveText('Banana');
+        await expect(page.getByTestId('topic-spinner')).toHaveCount(0);
+        await expect(page.getByTestId('ai-task')).toHaveCount(0);
+    });
+
+    test('Shift+Tab on a topic without subtopics generates a list of them', async ({page}) => {
+        await mockBridge(page, ['Apple\nBanana\nCherry']);
+        await open(page);
+        await page.keyboard.press('Shift+Tab');
+        await expect(topics(page)).toHaveCount(2);
+        for (const fruit of ['Apple', 'Banana', 'Cherry']) await expect(topic(page, fruit)).toBeVisible();
+        await expect(topics(page)).toHaveCount(4);
+        await expect(selected(page)).toHaveText('Apple');
+
+        await page.keyboard.press(`${MOD}+z`);
+        await expect(topics(page)).toHaveCount(1);
+    });
+
+    test('settings change the model', async ({page}) => {
+        await mockBridge(page, []);
+        await open(page);
+        await page.getByTestId('open-settings').click();
+        await page.getByTestId('settings-dialog').getByRole('button', {name: 'sonnet'}).click();
+        await page.getByTestId('settings-save').click();
+        await expect(page.getByTestId('settings-dialog')).toHaveCount(0);
+        await expect(page.getByTestId('ai-status')).toHaveText('sonnet');
+        await expect(page.getByTestId('mindmap')).toBeFocused();
     });
 });

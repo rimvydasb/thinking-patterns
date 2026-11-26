@@ -1,5 +1,11 @@
-import {useEffect, useState} from 'react';
-import {createMindMapStore, MindMap} from './mindmap';
+import {useEffect, useRef, useState} from 'react';
+import './ai/ai.css';
+import {AiStatusChip, GenerationProgress, SettingsButton} from './ai/AiControls';
+import {createBrainstorm, type Brainstorm} from './ai/brainstorm';
+import {loadAiSettings, saveAiSettings, type AiSettings} from './ai/settings';
+import {SettingsDialog} from './ai/SettingsDialog';
+import {useBridgeStatus} from './ai/useBridgeStatus';
+import {createMindMapStore, MindMap, useMindMapState} from './mindmap';
 import {FileStatusBanner} from './mindmap/components/FileStatusBanner';
 import {MapFilePicker} from './mindmap/components/MapFilePicker';
 import {createTree, fromOutline} from './mindmap/model/tree';
@@ -37,6 +43,40 @@ export function App() {
     const [pickerOpen, setPickerOpen] = useState(false);
     const [client, setClient] = useState<SyncClient | null>(null);
 
+    const [aiSettings, setAiSettings] = useState<AiSettings>(loadAiSettings);
+    const aiSettingsRef = useRef(aiSettings);
+    aiSettingsRef.current = aiSettings;
+    const [settingsOpen, setSettingsOpen] = useState(false);
+    const [aiError, setAiError] = useState<string | null>(null);
+    const {status: bridgeStatus, recheck: recheckBridge} = useBridgeStatus(aiSettings.serverUrl);
+    const generatingCount = useMindMapState(store, (s) => Object.keys(s.generating).length);
+    const [brainstorm, setBrainstorm] = useState<Brainstorm | null>(null);
+
+    useEffect(() => {
+        const b = createBrainstorm({
+            store,
+            settings: () => aiSettingsRef.current,
+            onError: (message) => {
+                setAiError(message);
+                recheckBridge();
+            },
+        });
+        setBrainstorm(b);
+        return () => b.dispose();
+    }, [store, recheckBridge]);
+
+    // Errors stay on screen for a few seconds; a new generation hides them.
+    useEffect(() => {
+        if (!aiError) return;
+        const timer = setTimeout(() => setAiError(null), 6000);
+        return () => clearTimeout(timer);
+    }, [aiError]);
+
+    const closeSettings = () => {
+        setSettingsOpen(false);
+        document.querySelector<HTMLElement>('.mm-root')?.focus({preventScroll: true});
+    };
+
     useEffect(() => {
         if (offline) return;
         const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws';
@@ -72,7 +112,16 @@ export function App() {
 
     return (
         <>
-            <MindMap store={store} style={{width: '100vw', height: '100vh'}} toolbarExtra={fileControls} />
+            <MindMap
+                store={store}
+                style={{width: '100vw', height: '100vh'}}
+                toolbarExtra={fileControls}
+                onGenerateTopic={(where) => {
+                    setAiError(null);
+                    brainstorm?.generate(where);
+                }}
+            />
+            <GenerationProgress count={generatingCount} error={aiError} />
             <div className="app-status">
                 {file && (file.state === 'clean' || file.state === 'writing') && (
                     <div className={`app-file app-file--${file.state}`} data-testid="file-status">
@@ -84,7 +133,24 @@ export function App() {
                         {status === 'online' ? 'Live' : status === 'connecting' ? 'Connecting…' : 'Offline'}
                     </div>
                 )}
+                <AiStatusChip
+                    status={bridgeStatus}
+                    model={aiSettings.model}
+                    onClick={() => setSettingsOpen(true)}
+                />
+                <SettingsButton onClick={() => setSettingsOpen(true)} />
             </div>
+            {settingsOpen && (
+                <SettingsDialog
+                    settings={aiSettings}
+                    onSave={(next) => {
+                        saveAiSettings(next);
+                        setAiSettings(next);
+                        closeSettings();
+                    }}
+                    onClose={closeSettings}
+                />
+            )}
             {file && client && <FileStatusBanner file={file} onWrite={() => client.writeFile()} />}
             {(file === null || pickerOpen) && (
                 <MapFilePicker

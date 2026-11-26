@@ -16,6 +16,8 @@ export type TopicNodeData = {
     editing: boolean;
     editSeed: string | null;
     hiddenCount: number;
+    /** The topic name is being generated. */
+    generating: boolean;
 };
 
 export type TopicNodeType = Node<TopicNodeData, 'topic'>;
@@ -117,12 +119,13 @@ function TopicNodeComponent({id, data, width, height}: NodeProps<TopicNodeType>)
     return (
         <div
             ref={boxRef}
-            className={`mm-topic mm-topic--d${Math.min(data.depth, 3)}${data.selected ? ' is-selected' : ''}${data.editing ? ' is-editing' : ''}`}
+            className={`mm-topic mm-topic--d${Math.min(data.depth, 3)}${data.selected ? ' is-selected' : ''}${data.editing ? ' is-editing' : ''}${data.generating ? ' is-generating' : ''}`}
             data-testid="topic"
             data-topic-id={id}
             data-depth={data.depth}
             data-side={data.side ?? 'root'}
             aria-selected={data.selected}
+            aria-busy={data.generating || undefined}
             role="treeitem"
             style={{
                 ...textStyle,
@@ -174,6 +177,15 @@ function TopicNodeComponent({id, data, width, height}: NodeProps<TopicNodeType>)
                 <span className="mm-topic__text" data-testid="topic-text">
                     {data.text}
                 </span>
+            )}
+
+            {data.generating && (
+                <span
+                    className="mm-topic__spinner"
+                    data-testid="topic-spinner"
+                    title="Generating topic name"
+                    style={{color: colors.line}}
+                />
             )}
 
             {data.hiddenCount > 0 && (

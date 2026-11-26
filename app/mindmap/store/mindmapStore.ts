@@ -7,6 +7,9 @@ import type {LayoutKind, MindMapTree, NodeId} from '../model/types';
 
 const HISTORY_LIMIT = 200;
 
+/** Text of a topic while its name is being generated. */
+export const PENDING_TEXT = '…';
+
 export interface EditingState {
     id: NodeId;
     /** Text to start with (typing on a selected topic replaces its text). `null` = current text, all selected. */
@@ -20,6 +23,8 @@ export interface MindMapState {
     editing: EditingState | null;
     past: MindMapTree[];
     future: MindMapTree[];
+    /** Topics whose text is being generated (they show a spinner). */
+    generating: Readonly<Record<NodeId, true>>;
 
     select(id: NodeId): void;
     navigate(key: ArrowKey): void;
@@ -29,6 +34,18 @@ export interface MindMapState {
     addChild(): void;
     addSibling(position?: 'before' | 'after'): void;
     addParent(): void;
+    /**
+     * Adds a child (`child`) or a following sibling (`sibling`) of the selected topic with placeholder text, selects
+     * it and marks it as generating. Returns the new id. Call `resolvePending` when its text is known.
+     */
+    addPending(where: 'child' | 'sibling'): NodeId;
+    /**
+     * Ends generation of a pending topic. `text` replaces the placeholder (not as a separate undo step: undo removes
+     * the whole topic). `null` (failed) puts the default text in. A topic that was edited or removed meanwhile is
+     * left as it is. `more` are further topics added right after it as siblings (a generated list), in the same
+     * undo step.
+     */
+    resolvePending(id: NodeId, text: string | null, more?: readonly string[]): void;
     deleteSelected(): void;
     toggleCollapse(id?: NodeId): void;
     moveSelected(delta: number): void;
@@ -80,6 +97,7 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
             editing: null,
             past: [],
             future: [],
+            generating: {},
 
             select: (id) => {
                 if (get().tree.nodes[id]) set({selectedId: id});
@@ -122,6 +140,35 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
                 if (selectedId === tree.rootId) return;
                 const r = T.addParent(tree, selectedId);
                 commit(r.tree, {selectedId: r.id, editing: {id: r.id, seed: null}});
+            },
+
+            addPending: (where) => {
+                const {tree, selectedId, generating} = get();
+                const r =
+                    where === 'child'
+                        ? T.addChild(tree, selectedId, {text: PENDING_TEXT})
+                        : T.addSibling(tree, selectedId, 'after', {text: PENDING_TEXT});
+                commit(r.tree, {selectedId: r.id, editing: null, generating: {...generating, [r.id]: true}});
+                return r.id;
+            },
+
+            resolvePending: (id, text, more = []) => {
+                const {tree, generating} = get();
+                const {[id]: _done, ...rest} = generating;
+                const node = tree.nodes[id];
+                if (!node) return set({generating: rest});
+                let next =
+                    node.text === PENDING_TEXT
+                        ? T.updateText(tree, id, text?.trim() || T.defaultTextFor(T.depthOf(tree, id)))
+                        : tree;
+                let after = id;
+                for (const extra of more) {
+                    if (!extra.trim()) continue;
+                    const r = T.addSibling(next, after, 'after', {text: extra.trim()});
+                    next = r.tree;
+                    after = r.id;
+                }
+                set({tree: next, generating: rest});
             },
 
             deleteSelected: () => {
@@ -198,4 +245,9 @@ export function useMindMapStoreApi(): MindMapStore {
 
 export function useMindMap<U>(selector: (s: MindMapState) => U): U {
     return useStore(useMindMapStoreApi(), selector);
+}
+
+/** Reads a store from outside `<MindMap>` (e.g. the app shell). */
+export function useMindMapState<U>(store: MindMapStore, selector: (s: MindMapState) => U): U {
+    return useStore(store, selector);
 }

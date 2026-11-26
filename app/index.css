@@ -12,6 +12,7 @@ body,
   top: 12px;
   right: 12px;
   display: flex;
+  align-items: center;
   gap: 6px;
   pointer-events: none;
 }

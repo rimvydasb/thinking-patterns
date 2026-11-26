@@ -45,6 +45,11 @@ export interface MindMapProps {
     /** Extra controls at the end of the toolbar (the app puts the map file actions there). */
     toolbarExtra?: ReactNode;
     showHelp?: boolean;
+    /**
+     * Shift+Tab (`child`) and Shift+Enter (`sibling`) call this to add a topic whose name is generated (AI).
+     * Without it, Shift+Enter adds an empty sibling before the selection and Shift+Tab does nothing.
+     */
+    onGenerateTopic?(where: 'child' | 'sibling'): void;
     autoFocus?: boolean;
     className?: string;
     style?: CSSProperties;
@@ -91,6 +96,7 @@ function MindMapCanvas({
     showToolbar = true,
     toolbarExtra,
     showHelp = true,
+    onGenerateTopic,
     autoFocus = true,
     className,
     style,
@@ -100,6 +106,7 @@ function MindMapCanvas({
     const layout = useMindMap((s) => s.layout);
     const selectedId = useMindMap((s) => s.selectedId);
     const editing = useMindMap((s) => s.editing);
+    const generating = useMindMap((s) => s.generating);
     const {result: computed, version} = useAutoLayout();
     const result = useMemo(
         () => (computed ? withProvisionalNodes(computed, tree, layout) : null),
@@ -131,10 +138,11 @@ function MindMapCanvas({
                     editing: editing?.id === p.id,
                     editSeed: editing?.id === p.id ? editing.seed : null,
                     hiddenCount: hiddenDescendantCount(tree, p.id),
+                    generating: !!generating[p.id],
                 },
             };
         });
-    }, [result, tree, layout, selectedId, editing]);
+    }, [result, tree, layout, selectedId, editing, generating]);
 
     const edges = useMemo<BranchEdgeType[]>(() => {
         if (!result) return [];
@@ -214,11 +222,14 @@ function MindMapCanvas({
         } else {
             switch (e.key) {
                 case 'Tab':
-                    if (e.shiftKey) handled = false;
-                    else s.addChild();
+                    if (!e.shiftKey) s.addChild();
+                    else if (onGenerateTopic) onGenerateTopic('child');
+                    else handled = false;
                     break;
                 case 'Enter':
-                    s.addSibling(e.shiftKey ? 'before' : 'after');
+                    if (!e.shiftKey) s.addSibling('after');
+                    else if (onGenerateTopic) onGenerateTopic('sibling');
+                    else s.addSibling('before');
                     break;
                 case 'Delete':
                 case 'Backspace':
@@ -295,7 +306,7 @@ function MindMapCanvas({
                         extra={toolbarExtra}
                     />
                 )}
-                {showHelp && <ShortcutHelp />}
+                {showHelp && <ShortcutHelp generate={!!onGenerateTopic} />}
             </ReactFlow>
         </div>
     );

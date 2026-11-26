@@ -62,6 +62,38 @@
   cursor: pointer;
 }
 
+/* A topic whose name is being generated (AI). */
+.mm-topic.is-generating .mm-topic__text {
+  animation: mm-pulse 1.2s ease-in-out infinite;
+}
+
+.mm-topic__spinner {
+  position: absolute;
+  top: -7px;
+  right: -7px;
+  box-sizing: border-box;
+  width: 14px;
+  height: 14px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  background: #fff;
+  animation: mm-spin 0.7s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes mm-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes mm-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
 /* Handles are only anchor points for edges. */
 .mm-topic .react-flow__handle {
   opacity: 0;

@@ -116,10 +116,15 @@ export function Toolbar({onFit, extra}: {onFit(): void; extra?: ReactNode}) {
     );
 }
 
-const SHORTCUTS: [string, string][] = [
+const shortcuts = (generate: boolean): [string, string][] => [
     ['Tab', 'Add child'],
     ['Enter', 'Add sibling after'],
-    ['Shift+Enter', 'Add sibling before'],
+    ...(generate
+        ? ([
+              ['Shift+Tab', 'Generate child (AI; a list if none yet)'],
+              ['Shift+Enter', 'Generate sibling (AI)'],
+          ] as [string, string][])
+        : ([['Shift+Enter', 'Add sibling before']] as [string, string][])),
     [`${MOD}+Enter`, 'Insert parent'],
     ['Delete / ⌫', 'Delete topic'],
     ['F2 / Space / type', 'Edit text'],
@@ -130,13 +135,13 @@ const SHORTCUTS: [string, string][] = [
     ['Esc', 'Cancel editing'],
 ];
 
-export function ShortcutHelp() {
+export function ShortcutHelp({generate = false}: {generate?: boolean}) {
     const [open, setOpen] = useState(false);
     return (
         <Panel position="bottom-left" className="mm-help">
             {open && (
                 <dl className="mm-help__list" data-testid="shortcut-help">
-                    {SHORTCUTS.map(([k, v]) => (
+                    {shortcuts(generate).map(([k, v]) => (
                         <div key={k}>
                             <dt>
                                 <kbd>{k}</kbd>
