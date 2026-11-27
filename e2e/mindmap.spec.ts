@@ -412,3 +412,52 @@ test.describe('AI brainstorming', () => {
         await expect(page.getByTestId('mindmap')).toBeFocused();
     });
 });
+
+test.describe('markdown import / export', () => {
+    test('exports the map as a .map.md download', async ({page}) => {
+        await open(page);
+        await page.getByTestId('import-export').click();
+        const [download] = await Promise.all([
+            page.waitForEvent('download'),
+            page.getByTestId('export-markdown').click(),
+        ]);
+        expect(download.suggestedFilename()).toBe('Central Topic.map.md');
+        const chunks: Buffer[] = [];
+        for await (const c of await download.createReadStream()) chunks.push(c as Buffer);
+        expect(Buffer.concat(chunks).toString('utf8')).toBe('---\nmindmap: 1\n---\n\n# Map\n\n- Central Topic\n');
+        await expect(page.getByTestId('export-markdown')).toHaveCount(0);
+    });
+
+    test('imports a Markdown file and undo restores the previous map', async ({page}) => {
+        await open(page);
+        await page.getByTestId('import-export').click();
+        const [chooser] = await Promise.all([
+            page.waitForEvent('filechooser'),
+            page.getByTestId('import-markdown').click(),
+        ]);
+        await chooser.setFiles({
+            name: 'ideas.md',
+            mimeType: 'text/markdown',
+            buffer: Buffer.from('- Ideas\n  - First\n  - Second\n'),
+        });
+        await expect(page.getByTestId('import-status')).toHaveText('Imported ideas.md');
+        await expect(topics(page)).toHaveCount(3);
+        await expect(topic(page, 'Second')).toBeVisible();
+
+        await page.keyboard.press(`${MOD}+z`);
+        await expect(topics(page)).toHaveCount(1);
+        await expect(topic(page, 'Central Topic')).toBeVisible();
+    });
+
+    test('shows an error for a file without topics', async ({page}) => {
+        await open(page);
+        await page.getByTestId('import-export').click();
+        const [chooser] = await Promise.all([
+            page.waitForEvent('filechooser'),
+            page.getByTestId('import-markdown').click(),
+        ]);
+        await chooser.setFiles({name: 'empty.md', mimeType: 'text/markdown', buffer: Buffer.from('plain text\n')});
+        await expect(page.getByTestId('import-status')).toContainText('no list items or headings');
+        await expect(topics(page)).toHaveCount(1);
+    });
+});

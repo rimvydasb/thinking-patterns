@@ -7,6 +7,7 @@ import {SettingsDialog} from './ai/SettingsDialog';
 import {useBridgeStatus} from './ai/useBridgeStatus';
 import {createMindMapStore, MindMap, useMindMapState} from './mindmap';
 import {FileStatusBanner} from './mindmap/components/FileStatusBanner';
+import {ImportExportMenu} from './mindmap/components/ImportExportMenu';
 import {MapFilePicker} from './mindmap/components/MapFilePicker';
 import {createTree, fromOutline} from './mindmap/model/tree';
 import type {LayoutKind} from './mindmap/model/types';
@@ -139,6 +140,7 @@ export function App() {
                     onClick={() => setSettingsOpen(true)}
                 />
                 <SettingsButton onClick={() => setSettingsOpen(true)} />
+                <ImportExportMenu store={store} />
             </div>
             {settingsOpen && (
                 <SettingsDialog
