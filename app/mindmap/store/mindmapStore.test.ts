@@ -116,6 +116,16 @@ describe('mind map store', () => {
         expect(s.getState().tree.nodes['root'].children).toEqual(['root.0', 'root.1', 'root.2']);
     });
 
+    it('keeps the layout in the map, as one undo step', () => {
+        const s = make();
+        s.getState().setLayout('logic');
+        expect(s.getState().tree.layout).toBe('logic');
+        s.getState().setLayout('logic');
+        expect(s.getState().past).toHaveLength(1);
+        s.getState().undo();
+        expect(s.getState().tree.layout).toBeUndefined();
+    });
+
     it('navigates using the current layout', () => {
         const s = make();
         s.getState().setLayout('org');

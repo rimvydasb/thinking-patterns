@@ -201,6 +201,7 @@ Measured with k6 in the nightly pipeline.
 | Element | Rule | Parse result if broken |
 | --- | --- | --- |
 | Frontmatter | MUST be the first block and MUST contain `mindmap: 1`. Other keys are kept verbatim. | Error |
+| `mindmap-layout` | Optional frontmatter key: `mindmap`, `logic` or `org`. The layout of the map. Absent: `mindmap`. | Warning: the layout is ignored |
 | `# Map` | MUST exist once and MUST hold exactly one top-level bullet: the central topic. | Error |
 | List | Bullets `-`, `*`, `+`, `1.`. Any consistent indentation. Indented non-bullet lines continue the topic text. | Error for text that is not in a list item |
 | Topic text | Inline Markdown is kept verbatim. The serializer escapes a leading `-`, `*`, `+`, `#` or `1.` with `\`. | - |
@@ -212,7 +213,7 @@ Measured with k6 in the nightly pipeline.
 
 - The serializer writes LF line endings, a final newline, `-` bullets, and 2 spaces per level.
 - The serializer writes notes in pre-order of the tree, then orphan notes in their original order.
-- The serializer writes the frontmatter verbatim. A new file gets `mindmap: 1`.
+- The serializer writes the frontmatter verbatim, except the `mindmap-layout` line: it is replaced in place, or added after `mindmap: 1`. A new file gets `mindmap: 1` and no layout.
 - An orphan note stays in the file and in `FileState.diagnostics`. The user fixes its heading.
 - A topic rename in the GUI or through MCP rewrites its note heading, so the note follows the topic.
 

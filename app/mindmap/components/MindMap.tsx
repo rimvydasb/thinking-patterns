@@ -15,7 +15,7 @@ import {useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardE
 import {computeLayout, withProvisionalNodes, type LayoutResult} from '../layout/elkLayout';
 import {topicColors} from '../layout/theme';
 import {branchIndex, fromOutline, getNode, hiddenDescendantCount, sideOf, subtreeIds} from '../model/tree';
-import type {LayoutKind, MindMapTree, NodeId, Outline, Side} from '../model/types';
+import {layoutOf, type LayoutKind, type MindMapTree, type NodeId, type Outline, type Side} from '../model/types';
 import {
     createMindMapStore,
     MindMapStoreContext,
@@ -96,7 +96,7 @@ function pointerOf(e: MouseEvent | TouchEvent): {x: number; y: number} | null {
 
 function useAutoLayout(): {result: LayoutResult | null; version: number} {
     const tree = useMindMap((s) => s.tree);
-    const layout = useMindMap((s) => s.layout);
+    const layout = useMindMap((s) => layoutOf(s.tree));
     const [state, setState] = useState<{result: LayoutResult | null; version: number}>({result: null, version: 0});
 
     useEffect(() => {
@@ -125,7 +125,7 @@ function MindMapCanvas({
 }: Omit<MindMapProps, 'initialTree' | 'initialLayout' | 'store'>) {
     const store = useMindMapStoreApi();
     const tree = useMindMap((s) => s.tree);
-    const layout = useMindMap((s) => s.layout);
+    const layout = useMindMap((s) => layoutOf(s.tree));
     const selectedId = useMindMap((s) => s.selectedId);
     const selectedIds = useMindMap((s) => s.selectedIds);
     const editing = useMindMap((s) => s.editing);

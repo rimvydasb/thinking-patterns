@@ -4,7 +4,8 @@ import type {MindMapTree, MindNode, NodeId} from '../types';
 
 /**
  * Returns `parsed` with the ids of `previous` where topics match, so a file change keeps the selection, the undo
- * history and pending GUI edits of unchanged, renamed and moved topics. Text, notes and icons always come from `parsed`;
+ * history and pending GUI edits of unchanged, renamed and moved topics. Text, notes, icons and the layout always come
+ * from `parsed`;
  * `collapsed` comes from `previous` for matched topics. Only the ids depend on the match, never the content.
  *
  * Steps (docs/map-file-lifecycle-story.md, "Id reconciliation"):
@@ -74,7 +75,7 @@ export function reconcileTrees(previous: MindMapTree, parsed: MindMapTree): Mind
         if (n.icons?.length) node.icons = [...n.icons];
         nodes[id] = node;
     }
-    return {rootId: idOf.get(parsed.rootId)!, nodes};
+    return {rootId: idOf.get(parsed.rootId)!, nodes, ...(parsed.layout ? {layout: parsed.layout} : {})};
 }
 
 /** Step 4: pairs of remaining topics whose text is unique among the remaining topics on both sides. */

@@ -1,5 +1,5 @@
 import {normalizeIcons, sameIcons} from './icons';
-import type {MindMapTree, MindNode, NodeId, Outline} from './types';
+import type {LayoutKind, MindMapTree, MindNode, NodeId, Outline} from './types';
 
 /**
  * A change to a mind map. Ops are the unit of synchronisation between the app, the server and agents (MCP).
@@ -20,7 +20,9 @@ export type MapOp =
     /** Sets the note of a topic. An empty string removes the note. */
     | {op: 'setNote'; id: NodeId; note: string}
     /** Sets the icon shortcodes of a topic (see `icons.ts`). An empty list removes the icons. */
-    | {op: 'setIcons'; id: NodeId; icons: string[]};
+    | {op: 'setIcons'; id: NodeId; icons: string[]}
+    /** Sets the layout of the whole map. `null` removes it (the default `mindmap` layout applies). */
+    | {op: 'setLayout'; layout: LayoutKind | null};
 
 export type MapOpKind = MapOp['op'];
 
@@ -112,6 +114,11 @@ export function applyOp(tree: MindMapTree, op: MapOp): MindMapTree {
             const {icons: _drop, ...rest} = node;
             return {...tree, nodes: {...nodes, [op.id]: op.icons.length ? {...rest, icons: [...op.icons]} : rest}};
         }
+        case 'setLayout': {
+            if ((tree.layout ?? null) === op.layout) return tree;
+            const {layout: _drop, ...rest} = tree;
+            return op.layout ? {...rest, layout: op.layout} : rest;
+        }
     }
 }
 
@@ -138,7 +145,8 @@ export function applyOps(tree: MindMapTree, ops: readonly MapOp[]): ApplyResult 
  * Both trees MUST share the root id.
  *
  * Order: adds and moves in pre-order of `to` (so a parent is in its final place before its children arrive and a
- * move can never create a cycle), then text, collapse, note and icon changes, then removals of what is left over.
+ * move can never create a cycle), then text, collapse, note and icon changes, then removals of what is left over,
+ * then the layout.
  * A child is moved only when its order relative to the siblings that stay under the same parent changes, so a topic
  * that leaves a parent causes exactly one `move` and no reordering of the siblings it leaves behind.
  */
@@ -185,6 +193,7 @@ export function diffTrees(from: MindMapTree, to: MindMapTree): MapOp[] {
     for (const id of Object.keys(from.nodes)) {
         if (!to.nodes[id] && work.nodes[id]) push({op: 'remove', id});
     }
+    if ((from.layout ?? null) !== (to.layout ?? null)) push({op: 'setLayout', layout: to.layout ?? null});
     return ops;
 }
 

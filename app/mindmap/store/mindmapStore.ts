@@ -4,7 +4,7 @@ import {isIconCode, toggleIcon} from '../model/icons';
 import {applyOps, type MapOp} from '../model/ops';
 import * as T from '../model/tree';
 import type {ArrowKey} from '../model/tree';
-import type {LayoutKind, MindMapTree, NodeId} from '../model/types';
+import {layoutOf, type LayoutKind, type MindMapTree, type NodeId} from '../model/types';
 
 const HISTORY_LIMIT = 200;
 
@@ -18,8 +18,8 @@ export interface EditingState {
 }
 
 export interface MindMapState {
+    /** The map. Its layout is `tree.layout` (see `layoutOf`), so it is saved in the map file and synced. */
     tree: MindMapTree;
-    layout: LayoutKind;
     /** The focused topic: keyboard actions, editing and the toolbar act on it. */
     selectedId: NodeId;
     /**
@@ -72,6 +72,7 @@ export interface MindMapState {
     moveTopics(ids: readonly NodeId[], parentId: NodeId): void;
     undo(): void;
     redo(): void;
+    /** Changes the layout of the map (one undo step). */
     setLayout(layout: LayoutKind): void;
     setTree(tree: MindMapTree): void;
     /**
@@ -86,12 +87,14 @@ export type MindMapStore = StoreApi<MindMapState>;
 
 export interface CreateStoreOptions {
     tree?: MindMapTree;
+    /** Overrides the layout of `tree`. */
     layout?: LayoutKind;
     selectedId?: NodeId;
 }
 
 export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore {
-    const initial = opts.tree ?? T.createTree();
+    const base = opts.tree ?? T.createTree();
+    const initial = opts.layout && opts.layout !== base.layout ? {...base, layout: opts.layout} : base;
     return createStore<MindMapState>()((rawSet, get) => {
         /**
          * Sets state and keeps the selection consistent: a new `selectedId` (without explicit `selectedIds`) resets
@@ -132,7 +135,6 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
 
         return {
             tree: initial,
-            layout: opts.layout ?? 'mindmap',
             selectedId: opts.selectedId && initial.nodes[opts.selectedId] ? opts.selectedId : initial.rootId,
             selectedIds: [opts.selectedId && initial.nodes[opts.selectedId] ? opts.selectedId : initial.rootId],
             editing: null,
@@ -153,8 +155,8 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
             },
 
             navigate: (key) => {
-                const {tree, selectedId, layout} = get();
-                set({selectedId: T.navigate(tree, selectedId, key, layout)});
+                const {tree, selectedId} = get();
+                set({selectedId: T.navigate(tree, selectedId, key, layoutOf(tree))});
             },
 
             startEditing: (id, seed = null) => {
@@ -313,7 +315,10 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
                 });
             },
 
-            setLayout: (layout) => set({layout}),
+            setLayout: (layout) => {
+                const {tree} = get();
+                if (layoutOf(tree) !== layout) commit(applyOps(tree, [{op: 'setLayout', layout}]).tree);
+            },
 
             setTree: (tree) => commit(tree, {selectedId: tree.rootId, editing: null}),
 

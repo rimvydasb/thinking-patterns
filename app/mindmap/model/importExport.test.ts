@@ -19,6 +19,13 @@ describe('markdown import / export', () => {
         expect(result.ok && result.tree).toEqual(tree);
     });
 
+    it('exports and imports the layout', () => {
+        const logic = {...tree, layout: 'logic' as const};
+        expect(exportMarkdown(logic)).toMatch(/^---\nmindmap: 1\nmindmap-layout: logic\n---\n/);
+        const result = importMarkdown(exportMarkdown(logic), tree);
+        expect(result.ok && result.tree).toEqual(logic);
+    });
+
     it('keeps the root id of the current map', () => {
         const current = createTree('Old', 'abc');
         const result = importMarkdown(exportMarkdown(tree), current);

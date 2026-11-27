@@ -7,6 +7,7 @@ import {findByName, findByPath, normalize} from '../topicPath';
 import {newId} from '../tree';
 import type {MindMapTree, MindNode, NodeId} from '../types';
 import {unescapeTopicLine} from './escape';
+import {readLayout} from './frontmatter';
 import type {Diagnostic, MapFileModel, OrphanNote, ParseResult} from './types';
 
 /**
@@ -114,6 +115,9 @@ class Reader {
 
         const tree = this.readMap(maps[0]);
         if (!tree) return null;
+        const {layout, error} = readLayout(first.value);
+        if (layout) tree.layout = layout;
+        if (error) this.warnings.push({line: lineOf(first), severity: 'warning', message: error});
         const pending = notes.length ? this.readNotes(notes[0]) : [];
         const orphanNotes = this.attachNotes(tree, pending);
         const extraSections = sections

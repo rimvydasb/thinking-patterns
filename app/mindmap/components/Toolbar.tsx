@@ -1,6 +1,6 @@
 import {Panel} from '@xyflow/react';
 import {useState, type ReactNode} from 'react';
-import type {LayoutKind} from '../model/types';
+import {layoutOf, type LayoutKind} from '../model/types';
 import {useMindMap, useMindMapStoreApi} from '../store/mindmapStore';
 
 const LAYOUTS: {kind: LayoutKind; label: string}[] = [
@@ -47,7 +47,7 @@ function ToolButton({
 
 export function Toolbar({onFit, extra}: {onFit(): void; extra?: ReactNode}) {
     const store = useMindMapStoreApi();
-    const layout = useMindMap((s) => s.layout);
+    const layout = useMindMap((s) => layoutOf(s.tree));
     const canUndo = useMindMap((s) => s.past.length > 0);
     const canRedo = useMindMap((s) => s.future.length > 0);
     const isRoot = useMindMap((s) => s.selectedId === s.tree.rootId);

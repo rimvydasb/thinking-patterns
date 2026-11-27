@@ -16,6 +16,8 @@ export interface MindNode {
 export interface MindMapTree {
     rootId: NodeId;
     nodes: Record<NodeId, MindNode>;
+    /** Layout of the map (`mindmap-layout` in the map file frontmatter). Absent: `mindmap`. */
+    layout?: LayoutKind;
 }
 
 /** Nested, human-friendly description of a map (maps 1:1 to a Markdown list later). */
@@ -33,6 +35,13 @@ export interface Outline {
  * - `org`: top-down (XMind "Org Chart")
  */
 export type LayoutKind = 'mindmap' | 'logic' | 'org';
+
+export const LAYOUT_KINDS: readonly LayoutKind[] = ['mindmap', 'logic', 'org'];
+
+export const isLayoutKind = (value: unknown): value is LayoutKind => LAYOUT_KINDS.includes(value as LayoutKind);
+
+/** The layout a map is shown with. */
+export const layoutOf = (tree: MindMapTree): LayoutKind => tree.layout ?? 'mindmap';
 
 /** Direction in which a node's children grow. */
 export type Side = 'right' | 'left' | 'down';

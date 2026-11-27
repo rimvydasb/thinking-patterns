@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {isIconCode} from '../../app/mindmap/model/icons';
 import type {MapOp} from '../../app/mindmap/model/ops';
-import type {Outline} from '../../app/mindmap/model/types';
+import {LAYOUT_KINDS, type LayoutKind, type Outline} from '../../app/mindmap/model/types';
 
 const id = z.string().min(1);
 const index = z.number().int().min(0);
@@ -15,6 +15,7 @@ export const mapOpSchema = z.discriminatedUnion('op', [
     z.object({op: z.literal('setCollapsed'), id, collapsed: z.boolean()}),
     z.object({op: z.literal('setNote'), id, note: z.string()}),
     z.object({op: z.literal('setIcons'), id, icons: z.array(z.string().refine(isIconCode, 'Unknown icon'))}),
+    z.object({op: z.literal('setLayout'), layout: z.enum(LAYOUT_KINDS as [LayoutKind, ...LayoutKind[]]).nullable()}),
 ]) satisfies z.ZodType<MapOp>;
 
 /** Icon shortcodes of a topic, as agents give them. */

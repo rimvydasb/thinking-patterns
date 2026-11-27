@@ -11,7 +11,7 @@ import {IconPanel, IconPanelButton} from './mindmap/components/IconPanel';
 import {ImportExportMenu} from './mindmap/components/ImportExportMenu';
 import {MapFilePicker} from './mindmap/components/MapFilePicker';
 import {createTree, fromOutline} from './mindmap/model/tree';
-import type {LayoutKind} from './mindmap/model/types';
+import {isLayoutKind} from './mindmap/model/types';
 import {SAMPLES} from './mindmap/samples';
 import {saveLastMapFile} from './mindmap/sync/lastMapFile';
 import {SYNC_PATH, type FileState} from './mindmap/sync/protocol';
@@ -25,19 +25,19 @@ import {connectSync, type SyncClient, type SyncStatus} from './mindmap/sync/sync
  *   the map and their changes show at once. The app starts with a `Central Topic` draft (or reopens the last file);
  *   the user opens a file from the import / export menu ("Open file…").
  * - `?sample=<name>` or `?offline`: in-memory only, no server (demos and e2e tests).
- * - `?layout=mindmap|logic|org`.
+ * - `?layout=mindmap|logic|org`: the layout of the start map (a map file brings its own layout).
  */
 export function App() {
     const params = new URLSearchParams(window.location.search);
     const sample = SAMPLES[params.get('sample') ?? ''];
-    const layout = (['mindmap', 'logic', 'org'] as const).find((l) => l === params.get('layout')) as
-        LayoutKind | undefined;
+    const layoutParam = params.get('layout');
+    const layout = isLayoutKind(layoutParam) ? layoutParam : undefined;
     const offline = !!sample || params.has('offline');
 
     const [store] = useState(() =>
         createMindMapStore({
             tree: sample ? fromOutline(sample) : createTree('Central Topic'),
-            layout: layout ?? 'mindmap',
+            layout,
         }),
     );
     const [status, setStatus] = useState<SyncStatus | null>(offline ? null : 'connecting');

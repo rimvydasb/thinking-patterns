@@ -153,6 +153,15 @@ describe('MapFileBinding writes', () => {
         expect(binding.fileState().state).toBe('clean');
     });
 
+    it('writes a layout change to the frontmatter and reads a layout change from the file', async () => {
+        const {doc, binding, fs} = await setup();
+        doc.apply([{op: 'setLayout', layout: 'logic'}]);
+        await binding.flush();
+        expect(fs.text(FILE)).toBe(PLAN.replace('mindmap: 1\n', 'mindmap: 1\nmindmap-layout: logic\n'));
+        fs.writeExternal(FILE, PLAN.replace('mindmap: 1\n', 'mindmap: 1\nmindmap-layout: org\n'));
+        await until(() => expect(doc.tree.layout).toBe('org'));
+    });
+
     it('writes notes and keeps frontmatter, other sections and orphan notes', async () => {
         const text = [
             '---',

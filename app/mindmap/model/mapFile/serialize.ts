@@ -3,17 +3,20 @@ import {createTree} from '../tree';
 import {shortestUniquePath} from '../topicPath';
 import type {MindMapTree, NodeId} from '../types';
 import {escapeTopicLine} from './escape';
+import {writeLayout} from './frontmatter';
 import {DEFAULT_FRONTMATTER, type MapFileModel} from './types';
 
 /**
  * Writes the canonical form of a map file: LF line endings, a final newline, `-` bullets, 2 spaces per level, notes in
  * pre-order of the tree, then orphan notes, then the other sections. Icons are `:shortcode:` tokens in front of the
- * topic text (`- :one: :star: Topic`). `collapsed` is a view state and is not written.
+ * topic text (`- :one: :star: Topic`). The layout is the `mindmap-layout` frontmatter key. `collapsed` is a view state
+ * and is not written.
  * Deterministic: the same model always gives the same text.
  */
 export function serializeMapFile(model: MapFileModel): string {
     const {tree} = model;
-    const blocks: string[] = [`---\n${model.frontmatter.replace(/\r\n?/g, '\n')}\n---`, '# Map', mapList(tree)];
+    const frontmatter = writeLayout(model.frontmatter.replace(/\r\n?/g, '\n'), tree.layout);
+    const blocks: string[] = [`---\n${frontmatter}\n---`, '# Map', mapList(tree)];
 
     const notes: string[] = [];
     preOrder(tree).forEach((id) => {
