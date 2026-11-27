@@ -51,6 +51,7 @@ export function Toolbar({onFit, extra}: {onFit(): void; extra?: ReactNode}) {
     const canUndo = useMindMap((s) => s.past.length > 0);
     const canRedo = useMindMap((s) => s.future.length > 0);
     const isRoot = useMindMap((s) => s.selectedId === s.tree.rootId);
+    const none = useMindMap((s) => s.selectedIds.length === 0);
     const act = (fn: () => void) => () => fn();
 
     return (
@@ -72,25 +73,28 @@ export function Toolbar({onFit, extra}: {onFit(): void; extra?: ReactNode}) {
                     label="+ Child"
                     title="Add child topic (Tab)"
                     testId="add-child"
+                    disabled={none}
                     onClick={act(() => store.getState().addChild())}
                 />
                 <ToolButton
                     label="+ Sibling"
                     title="Add sibling topic (Enter)"
                     testId="add-sibling"
+                    disabled={none}
                     onClick={act(() => store.getState().addSibling())}
                 />
                 <ToolButton
                     label="Delete"
                     title="Delete topic (Delete)"
                     testId="delete"
-                    disabled={isRoot}
+                    disabled={isRoot || none}
                     onClick={act(() => store.getState().deleteSelected())}
                 />
                 <ToolButton
                     label="Collapse"
                     title={`Collapse / expand (${MOD}+/)`}
                     testId="toggle-collapse"
+                    disabled={none}
                     onClick={act(() => store.getState().toggleCollapse())}
                 />
             </div>

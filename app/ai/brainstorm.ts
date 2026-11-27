@@ -66,6 +66,7 @@ export function createBrainstorm(opts: {
     return {
         generate(where) {
             const s = opts.store.getState();
+            if (!s.selectedIds.length) return;
             const list = where === 'child' && s.tree.nodes[s.selectedId].children.length === 0;
             const id = s.addPending(where);
             queue = queue.then(() => run(id, list));

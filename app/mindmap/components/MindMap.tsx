@@ -282,8 +282,12 @@ function MindMapCanvas({
         const mod = e.metaKey || e.ctrlKey;
         const horizontal = layout !== 'org';
         let handled = true;
+        const none = s.selectedIds.length === 0;
 
-        if (mod && e.key.toLowerCase() === 'z') {
+        if (none && !mod && !e.altKey && e.key.startsWith('Arrow')) {
+            // Nothing selected: the arrows pick up at the last focused topic.
+            s.reselect();
+        } else if (mod && e.key.toLowerCase() === 'z') {
             if (e.shiftKey) s.redo();
             else s.undo();
         } else if (mod && e.key.toLowerCase() === 'y') {
@@ -292,13 +296,15 @@ function MindMapCanvas({
             s.toggleCollapse();
         } else if (mod && e.key === 'Enter') {
             s.addParent();
-        } else if (e.altKey && e.key.startsWith('Arrow')) {
+        } else if (e.altKey && e.key.startsWith('Arrow') && !none) {
             const back = horizontal ? e.key === 'ArrowUp' : e.key === 'ArrowLeft';
             const fwd = horizontal ? e.key === 'ArrowDown' : e.key === 'ArrowRight';
             if (back) s.moveSelected(-1);
             else if (fwd) s.moveSelected(1);
             else handled = false;
         } else if (mod) {
+            handled = false;
+        } else if (none && e.key !== 'Home') {
             handled = false;
         } else {
             switch (e.key) {
@@ -399,7 +405,10 @@ function MindMapCanvas({
                     rootRef.current?.focus({preventScroll: true});
                 }}
                 onNodeDoubleClick={(_, node) => store.getState().startEditing(node.id)}
-                onPaneClick={() => rootRef.current?.focus({preventScroll: true})}
+                onPaneClick={() => {
+                    store.getState().deselect();
+                    rootRef.current?.focus({preventScroll: true});
+                }}
             >
                 <Background variant={BackgroundVariant.Dots} gap={24} size={1} color="#d9dce3" />
                 <Controls showInteractive={false} position="bottom-right" />

@@ -20,11 +20,15 @@ export interface EditingState {
 export interface MindMapState {
     /** The map. Its layout is `tree.layout` (see `layoutOf`), so it is saved in the map file and synced. */
     tree: MindMapTree;
-    /** The focused topic: keyboard actions, editing and the toolbar act on it. */
+    /**
+     * The focused topic: keyboard actions, editing and the toolbar act on it. While nothing is selected
+     * (`selectedIds` is empty) it is only where the keyboard picks up again.
+     */
     selectedId: NodeId;
     /**
      * All selected topics (Ctrl/Cmd+click adds more), in the order they were selected. Always contains `selectedId`.
      * Selecting a topic any other way (click, arrows, new topic) makes it the only selected one again.
+     * Empty when nothing is selected (clicked on the empty canvas): then the topic actions do nothing.
      */
     selectedIds: readonly NodeId[];
     editing: EditingState | null;
@@ -34,6 +38,10 @@ export interface MindMapState {
     generating: Readonly<Record<NodeId, true>>;
 
     select(id: NodeId): void;
+    /** Unselects all topics (click on the empty canvas). `select` or `reselect` selects again. */
+    deselect(): void;
+    /** Selects the focused topic again after `deselect`. */
+    reselect(): void;
     /** Adds a topic to the selection, or removes it if it is already selected (Ctrl/Cmd+click). */
     toggleSelect(id: NodeId): void;
     navigate(key: ArrowKey): void;
@@ -104,10 +112,12 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
             const s = get();
             const tree = patch.tree ?? s.tree;
             const selectedId = patch.selectedId ?? s.selectedId;
+            // Nothing selected stays so until a topic is selected again.
+            const none = !patch.selectedIds && selectedId === s.selectedId && !s.selectedIds.length;
             let ids = patch.selectedIds ?? (selectedId === s.selectedId ? s.selectedIds : [selectedId]);
             if (patch.tree || patch.selectedIds)
                 ids = ids.filter((id) => tree.nodes[id] && safeSelection(tree, id) === id);
-            if (!ids.includes(selectedId)) ids = [...ids, selectedId];
+            if (!none && !ids.includes(selectedId)) ids = [...ids, selectedId];
             rawSet(
                 ids.length === s.selectedIds.length && ids.every((id, i) => id === s.selectedIds[i])
                     ? patch
@@ -133,6 +143,9 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
             return hiddenBy ?? id;
         };
 
+        /** Whether a topic is selected, so the topic actions have something to act on. */
+        const hasSelection = () => get().selectedIds.length > 0;
+
         return {
             tree: initial,
             selectedId: opts.selectedId && initial.nodes[opts.selectedId] ? opts.selectedId : initial.rootId,
@@ -144,6 +157,15 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
 
             select: (id) => {
                 if (get().tree.nodes[id]) set({selectedId: id, selectedIds: [id]});
+            },
+
+            deselect: () => {
+                if (hasSelection()) rawSet({selectedIds: [], editing: null});
+            },
+
+            reselect: () => {
+                const {selectedId} = get();
+                if (!hasSelection()) set({selectedIds: [selectedId]});
             },
 
             toggleSelect: (id) => {
@@ -160,6 +182,7 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
             },
 
             startEditing: (id, seed = null) => {
+                if (id === undefined && !hasSelection()) return;
                 const target = id ?? get().selectedId;
                 if (get().tree.nodes[target]) set({selectedId: target, editing: {id: target, seed}});
             },
@@ -175,18 +198,21 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
             cancelEdit: () => set({editing: null}),
 
             addChild: () => {
+                if (!hasSelection()) return;
                 const {tree, selectedId} = get();
                 const r = T.addChild(tree, selectedId);
                 commit(r.tree, {selectedId: r.id, editing: {id: r.id, seed: null}});
             },
 
             addSibling: (position = 'after') => {
+                if (!hasSelection()) return;
                 const {tree, selectedId} = get();
                 const r = T.addSibling(tree, selectedId, position);
                 commit(r.tree, {selectedId: r.id, editing: {id: r.id, seed: null}});
             },
 
             addParent: () => {
+                if (!hasSelection()) return;
                 const {tree, selectedId} = get();
                 if (selectedId === tree.rootId) return;
                 const r = T.addParent(tree, selectedId);
@@ -223,6 +249,7 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
             },
 
             deleteSelected: () => {
+                if (!hasSelection()) return;
                 const {tree, selectedId} = get();
                 if (selectedId === tree.rootId) return;
                 const r = T.removeNode(tree, selectedId);
@@ -247,12 +274,14 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
 
             toggleCollapse: (id) => {
                 const {tree, selectedId} = get();
+                if (id === undefined && !hasSelection()) return;
                 const target = id ?? selectedId;
                 const next = T.toggleCollapsed(tree, target);
                 commit(next, {selectedId: safeSelection(next, selectedId)});
             },
 
             moveSelected: (delta) => {
+                if (!hasSelection()) return;
                 const {tree, selectedId} = get();
                 commit(T.moveAmongSiblings(tree, selectedId, delta));
             },

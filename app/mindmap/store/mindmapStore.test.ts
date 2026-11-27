@@ -94,6 +94,28 @@ describe('mind map store', () => {
         expect(s.getState().selectedIds).toEqual(['root']);
     });
 
+    it('unselects all topics and ignores topic actions until selected again', () => {
+        const s = make();
+        s.getState().select('root.0');
+        s.getState().toggleSelect('root.1');
+        s.getState().deselect();
+        expect(s.getState().selectedIds).toEqual([]);
+        s.getState().addChild();
+        s.getState().deleteSelected();
+        s.getState().toggleCollapse();
+        s.getState().startEditing();
+        expect(s.getState().past).toHaveLength(0);
+        expect(s.getState().editing).toBeNull();
+        s.getState().setLayout('org');
+        s.getState().undo();
+        expect(s.getState().selectedIds).toEqual([]);
+        s.getState().reselect();
+        expect(s.getState().selectedIds).toEqual(['root.1']);
+        s.getState().deselect();
+        s.getState().select('root.0');
+        expect(s.getState().selectedIds).toEqual(['root.0']);
+    });
+
     it('drops removed and hidden topics from the multi-selection', () => {
         const s = make();
         s.getState().select('root.1');

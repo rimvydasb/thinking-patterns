@@ -33,7 +33,9 @@ export function IconPanelButton({open, onToggle}: {open: boolean; onToggle(): vo
  * topic already has is removed again.
  */
 export function IconPanel({store}: {store: MindMapStore}) {
-    const active = useMindMapState(store, (s) => s.tree.nodes[s.selectedId]?.icons ?? NO_ICONS);
+    const active = useMindMapState(store, (s) =>
+        s.selectedIds.length ? (s.tree.nodes[s.selectedId]?.icons ?? NO_ICONS) : NO_ICONS,
+    );
     const count = useMindMapState(store, (s) => s.selectedIds.length);
     const [folded, setFolded] = useState<ReadonlySet<string>>(new Set());
 
@@ -49,7 +51,9 @@ export function IconPanel({store}: {store: MindMapStore}) {
         <aside id="mm-icon-panel" className="ip-panel" aria-label="Icons" data-testid="icon-panel">
             <header className="ip-head">
                 <h2 className="ip-title">Icons</h2>
-                <span className="ip-hint">{count > 1 ? `${count} topics selected` : 'Selected topic'}</span>
+                <span className="ip-hint">
+                    {count > 1 ? `${count} topics selected` : count ? 'Selected topic' : 'No topic selected'}
+                </span>
             </header>
             <div className="ip-groups">
                 {ICON_GROUPS.map((g) => {
