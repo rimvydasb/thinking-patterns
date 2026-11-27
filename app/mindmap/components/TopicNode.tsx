@@ -1,11 +1,15 @@
 import {Handle, Position, type Node, type NodeProps} from '@xyflow/react';
 import {memo, useEffect, useLayoutEffect, useRef} from 'react';
 import type {Side} from '../model/types';
+import {iconMetrics, iconsWidth} from '../layout/measure';
 import {FONT_FAMILY, topicColors, topicStyle} from '../layout/theme';
+import {iconEmoji} from '../model/icons';
 import {useMindMapStoreApi} from '../store/mindmapStore';
 
 export type TopicNodeData = {
     text: string;
+    /** Icon shortcodes shown in front of the text. */
+    icons: readonly string[];
     depth: number;
     branch: number;
     /** Direction of this node relative to its parent. */
@@ -107,6 +111,7 @@ function TopicNodeComponent({id, data, width, height}: NodeProps<TopicNodeType>)
     const store = useMindMapStoreApi();
     const s = topicStyle(data.depth);
     const colors = topicColors(data.depth, data.branch);
+    const icon = iconMetrics(data.depth);
 
     const textStyle: React.CSSProperties = {
         fontFamily: FONT_FAMILY,
@@ -138,7 +143,9 @@ function TopicNodeComponent({id, data, width, height}: NodeProps<TopicNodeType>)
                 ...textStyle,
                 // While editing, the box grows with the text (up to the wrap width).
                 width: data.editing ? 'max-content' : width,
-                maxWidth: data.editing ? s.maxTextWidth + s.padX * 2 + 4 : undefined,
+                maxWidth: data.editing
+                    ? s.maxTextWidth + s.padX * 2 + 4 + iconsWidth(data.depth, data.icons.length)
+                    : undefined,
                 // Topics on the left of the map grow leftwards, away from their parent.
                 ...(data.editing && data.side === 'left' ? {position: 'absolute', right: 0, top: 0} : {}),
                 minWidth: width,
@@ -158,13 +165,36 @@ function TopicNodeComponent({id, data, width, height}: NodeProps<TopicNodeType>)
             <Handle type="source" position={Position.Left} id="out-left" />
             <Handle type="source" position={Position.Bottom} id="out-bottom" />
 
+            {data.icons.length > 0 && (
+                <span
+                    className="mm-topic__icons"
+                    data-testid="topic-icons"
+                    style={{marginRight: icon.gap, height: icon.box}}
+                >
+                    {data.icons.map((code) => (
+                        <span
+                            key={code}
+                            className="mm-topic__icon"
+                            data-icon={code}
+                            title={`:${code}:`}
+                            style={{width: icon.box, height: icon.box, fontSize: icon.size}}
+                        >
+                            {iconEmoji(code) ?? '?'}
+                        </span>
+                    ))}
+                </span>
+            )}
+
             {data.editing ? (
                 <TopicEditor
                     initial={data.editSeed ?? data.text}
                     seeded={data.editSeed !== null}
                     style={{
                         ...textStyle,
-                        minWidth: Math.max(40, (width ?? 0) - s.padX * 2 - 4),
+                        minWidth: Math.max(
+                            40,
+                            (width ?? 0) - s.padX * 2 - 4 - iconsWidth(data.depth, data.icons.length),
+                        ),
                         maxWidth: s.maxTextWidth + 4,
                     }}
                     onCommit={(text) => {

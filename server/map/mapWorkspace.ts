@@ -1,10 +1,13 @@
 import path from 'node:path';
 import type {DirListing, FileState} from '../../app/mindmap/sync/protocol';
+import {isMindMapFile, NOT_A_MIND_MAP} from '../../app/mindmap/model/mapFile/parse';
 import {NodeFsPort, type FsPort} from './fsPort';
 import {MapError} from './mapDocument';
 import {MapFileError, openMapFile, type MapFileBinding} from './mapFileBinding';
 
-export const MAP_FILE_SUFFIX = '.map.md';
+/** Map files are Markdown files: any `.md` or `.markdown` name. */
+const MARKDOWN_FILE = /\.(md|markdown)$/i;
+const isMarkdownFileName = (name: string) => MARKDOWN_FILE.test(name) && !name.startsWith('.');
 
 /** A request the workspace refuses. `status` is the HTTP status of the REST answer. */
 export class WorkspaceError extends MapError {
@@ -26,7 +29,7 @@ export interface MapWorkspace {
     readonly root: string;
     /** The open file, `null` before the first open. */
     current(): MapFileBinding | null;
-    /** Subdirectories and `*.map.md` files of `dir` (default: the root). Rejects outside the root. */
+    /** Subdirectories and Markdown (`*.md`, `*.markdown`) files of `dir` (default: the root). Rejects outside the root. */
     listDir(dir?: string): Promise<DirListing>;
     /**
      * Closes the current file and opens `path`. Opening the open file again changes nothing.
@@ -83,6 +86,10 @@ export function createMapWorkspace(root: string, opts: {fs?: FsPort; pollMs?: nu
     const switchTo = async (target: string, create: boolean): Promise<FileState> => {
         if (create && (await fs.stat(target))) throw new WorkspaceError(`The file already exists: ${target}`, 409);
         if (binding && binding.fileState().path === target) return binding.fileState();
+        // Refuse a Markdown file that is not a mind map before the open file is closed, so it stays open.
+        if (!create && (await fs.stat(target)) && !isMindMapFile(await fs.read(target))) {
+            throw new WorkspaceError(`${NOT_A_MIND_MAP} ${target}`, 400);
+        }
         const previous = binding;
         binding = null;
         if (previous) await previous.close();
@@ -91,7 +98,10 @@ export function createMapWorkspace(root: string, opts: {fs?: FsPort; pollMs?: nu
         } catch (err) {
             if (previous) emit();
             if (err instanceof MapFileError) {
-                throw new WorkspaceError(err.message, err.code === 'exists' ? 409 : 404);
+                throw new WorkspaceError(
+                    err.message,
+                    err.code === 'exists' ? 409 : err.code === 'not-mindmap' ? 400 : 404,
+                );
             }
             throw err;
         }
@@ -113,9 +123,7 @@ export function createMapWorkspace(root: string, opts: {fs?: FsPort; pollMs?: nu
                 throw new WorkspaceError(`Not a directory: ${dir}`, 400);
             }
             const visible = entries.filter((e) =>
-                e.kind === 'dir'
-                    ? !e.name.startsWith('.') && !HIDDEN_DIRS.has(e.name)
-                    : !e.name.startsWith('.') && e.name.endsWith(MAP_FILE_SUFFIX),
+                e.kind === 'dir' ? !e.name.startsWith('.') && !HIDDEN_DIRS.has(e.name) : isMarkdownFileName(e.name),
             );
             const byName = (a: {name: string}, b: {name: string}) => a.name.localeCompare(b.name);
             const pick = (kind: 'dir' | 'file') =>
@@ -139,20 +147,20 @@ export function createMapWorkspace(root: string, opts: {fs?: FsPort; pollMs?: nu
                     return switchTo(target, !!o.create);
                 }
                 if (!path.isAbsolute(p)) throw new WorkspaceError(`The file path must be absolute: ${p}`, 400);
-                if (!p.endsWith(MAP_FILE_SUFFIX)) {
-                    throw new WorkspaceError(`A map file name must end with "${MAP_FILE_SUFFIX}": ${p}`, 400);
+                if (!MARKDOWN_FILE.test(p)) {
+                    throw new WorkspaceError(`A map file must be a Markdown file (.md or .markdown): ${p}`, 400);
                 }
                 if (o.create) {
                     const dir = await resolveInside(path.dirname(p), 'directory');
                     const name = path.basename(p);
-                    if (name === MAP_FILE_SUFFIX || name.startsWith('.')) {
+                    if (!isMarkdownFileName(name)) {
                         throw new WorkspaceError(`Invalid map file name: ${name}`, 400);
                     }
                     return switchTo(path.join(dir, name), true);
                 }
                 const real = await resolveInside(p, 'file');
-                if (!real.endsWith(MAP_FILE_SUFFIX)) {
-                    throw new WorkspaceError(`A map file name must end with "${MAP_FILE_SUFFIX}": ${real}`, 400);
+                if (!MARKDOWN_FILE.test(real)) {
+                    throw new WorkspaceError(`A map file must be a Markdown file (.md or .markdown): ${real}`, 400);
                 }
                 return switchTo(real, false);
             });

@@ -21,6 +21,13 @@ async function callTool(request: APIRequestContext, name: string, args: Record<s
 
 const topic = (page: Page, text: string) => page.getByTestId('topic').filter({hasText: text});
 
+/** Opens the file picker from the import / export menu. */
+async function openPicker(page: Page) {
+    await page.getByTestId('import-export').click();
+    await page.getByTestId('menu-open-file').click();
+    await expect(page.getByTestId('map-file-picker')).toBeVisible();
+}
+
 // The server holds one map, so tests that use it must not run in parallel.
 test.describe.configure({mode: 'serial'});
 
@@ -95,7 +102,7 @@ test.describe('the map file', () => {
         await page.goto('/');
         await expect(page.getByTestId('file-path')).toHaveText(liveFile);
 
-        await page.getByTestId('open-file').click();
+        await openPicker(page);
         const picker = page.getByTestId('map-file-picker');
         await expect(picker.getByTestId('picker-file')).toHaveText(['🧠live.map.md', '🧠picked.map.md']);
         await picker.getByText('picked.map.md').click();
@@ -110,7 +117,7 @@ test.describe('the map file', () => {
         const last = path.join(mapsDir, 'last.map.md');
         await writeFile(last, mapText('- Last opened map', '  - Still here'));
         await page.goto('/');
-        await page.getByTestId('open-file').click();
+        await openPicker(page);
         await page.getByTestId('map-file-picker').getByText('last.map.md').click();
         await expect(topic(page, 'Last opened map')).toBeVisible();
 
@@ -124,20 +131,76 @@ test.describe('the map file', () => {
         await expect(page.getByTestId('map-file-picker')).toHaveCount(0);
     });
 
-    test('with no file open and none remembered, the picker shows and cannot be dismissed', async ({page}) => {
+    test('with no file open and none remembered, the app starts with a Central Topic draft, not the picker', async ({
+        page,
+    }) => {
         await server.stop();
         server = await startServer({MAPS_DIR: mapsDir});
         await page.goto('/');
+        await expect(topic(page, 'Central Topic')).toBeVisible();
+        await expect(page.getByTestId('file-status')).toHaveText('Not saved');
+        await page.reload();
+        await expect(topic(page, 'Central Topic')).toBeVisible();
         const picker = page.getByTestId('map-file-picker');
-        await expect(picker).toBeVisible();
-        await expect(picker.getByTestId('picker-cancel')).toHaveCount(0);
-        await page.keyboard.press('Escape');
-        await expect(picker).toBeVisible();
+        await expect(picker).toHaveCount(0);
+        await expect(page.getByTestId('open-file')).toHaveCount(0);
 
+        await openPicker(page);
+        await picker.getByTestId('picker-close').click();
+        await expect(picker).toHaveCount(0);
+
+        await openPicker(page);
         await picker.getByTestId('picker-new-name').fill('fresh');
         await picker.getByTestId('picker-create').click();
         await expect(picker).toHaveCount(0);
-        await expect(topic(page, 'Central Topic')).toBeVisible();
-        expect(await readFile(path.join(mapsDir, 'fresh.map.md'), 'utf8')).toBe(mapText('- Central Topic'));
+        await expect(page.getByTestId('file-path')).toHaveText(path.join(mapsDir, 'fresh.md'));
+        expect(await readFile(path.join(mapsDir, 'fresh.md'), 'utf8')).toBe(mapText('- Central Topic'));
+    });
+
+    test('a Markdown file without the mindmap: 1 flag is refused as not a mind map file', async ({page}) => {
+        await writeFile(path.join(mapsDir, 'readme.md'), '# Readme\n\n- Just a list\n');
+        await page.goto('/');
+        // Earlier tests may leave another file open; the refused file must not replace it.
+        const filePath = page.getByTestId('file-path');
+        await expect(filePath).toBeVisible();
+        const before = (await filePath.textContent())!;
+        await openPicker(page);
+        const picker = page.getByTestId('map-file-picker');
+        await picker
+            .getByTestId('picker-file')
+            .filter({hasText: /^🧠readme\.md$/})
+            .click();
+        await expect(picker.getByTestId('picker-error')).toContainText('This is not a mind map file');
+        await expect(filePath).toHaveText(before);
+    });
+
+    test('the picker lists and opens any Markdown file', async ({page}) => {
+        await writeFile(path.join(mapsDir, 'notes.md'), mapText('- Plain notes', '  - Item'));
+        await page.goto('/');
+        await openPicker(page);
+        const picker = page.getByTestId('map-file-picker');
+        await picker
+            .getByTestId('picker-file')
+            .filter({hasText: /^🧠notes\.md$/})
+            .click();
+        await expect(picker).toHaveCount(0);
+        await expect(topic(page, 'Plain notes')).toBeVisible();
+        await openPicker(page);
+        await page.keyboard.press('Escape');
+        await expect(picker).toHaveCount(0);
+    });
+
+    // Last: it leaves an invalid file open.
+    test('a mind map file without a "# Map" section opens with a parse error', async ({page}) => {
+        const broken = path.join(mapsDir, 'broken.md');
+        await writeFile(broken, '---\nmindmap: 1\n---\n\n# Notes\n');
+        await page.goto('/');
+        await openPicker(page);
+        await page
+            .getByTestId('map-file-picker')
+            .getByTestId('picker-file')
+            .filter({hasText: /^🧠broken\.md$/})
+            .click();
+        await expect(page.getByTestId('file-banner')).toContainText('exactly one "# Map" section');
     });
 });

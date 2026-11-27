@@ -302,7 +302,7 @@ describe('the map file', () => {
             `${dir}/../${path.basename(outside)}/secret.map.md`,
             path.join(dir, 'link.map.md'),
             'relative.map.md',
-            path.join(dir, 'notes.md'),
+            path.join(dir, 'notes.txt'),
         ]) {
             expect([p, (await post('/api/map/open', {path: p})).status]).toEqual([p, 400]);
         }
@@ -316,9 +316,10 @@ describe('the map file', () => {
         expect(workspace.current()!.fileState().path).toBe(mapFile);
     });
 
-    it('lists subdirectories and *.map.md files only, and hides .git and node_modules', async () => {
+    it('lists subdirectories and Markdown files only, and hides .git and node_modules', async () => {
         for (const d of ['.git', 'node_modules', 'docs', 'archive']) await mkdir(path.join(dir, d));
         await writeFile(path.join(dir, 'README.md'), '# Readme');
+        await writeFile(path.join(dir, 'notes.txt'), 'text');
         await writeFile(path.join(dir, 'b.map.md'), mapText('- B'));
         await writeFile(path.join(dir, 'docs', 'inner.map.md'), mapText('- Inner'));
 
@@ -332,6 +333,7 @@ describe('the map file', () => {
                 {name: 'docs', path: path.join(dir, 'docs'), kind: 'dir'},
                 {name: 'b.map.md', path: path.join(dir, 'b.map.md'), kind: 'file'},
                 {name: 'plan.map.md', path: mapFile, kind: 'file'},
+                {name: 'README.md', path: path.join(dir, 'README.md'), kind: 'file'},
             ],
         });
         const docs = await (

@@ -27,6 +27,7 @@ import {BranchEdge, type BranchEdgeType} from './BranchEdge';
 import {ShortcutHelp, Toolbar} from './Toolbar';
 import {TopicNode, type TopicNodeType} from './TopicNode';
 
+const NO_ICONS: readonly string[] = [];
 const nodeTypes: NodeTypes = {topic: TopicNode};
 const edgeTypes: EdgeTypes = {branch: BranchEdge};
 
@@ -159,6 +160,7 @@ function MindMapCanvas({
                 focusable: false,
                 data: {
                     text: n.text,
+                    icons: n.icons ?? NO_ICONS,
                     depth: p.depth,
                     branch: branchIndex(tree, p.id),
                     side: p.side,

@@ -1,6 +1,7 @@
 import {McpServer} from '@modelcontextprotocol/sdk/server/mcp.js';
 import type {CallToolResult} from '@modelcontextprotocol/sdk/types.js';
 import {z} from 'zod';
+import {ICON_GROUPS, normalizeIcons} from '../../app/mindmap/model/icons';
 import {markdownToOutlines} from '../../app/mindmap/model/markdown';
 import {applyOps, diffTrees, outlineToOps, type MapOp} from '../../app/mindmap/model/ops';
 import {newId, pathTo} from '../../app/mindmap/model/tree';
@@ -9,7 +10,7 @@ import {normalize, topicPath} from '../../app/mindmap/model/topicPath';
 import {MapError, type MapDocument} from '../map/mapDocument';
 import {writesPausedMessage, type MapFileBinding} from '../map/mapFileBinding';
 import type {MapWorkspace} from '../map/mapWorkspace';
-import {topicInputSchema} from '../map/schemas';
+import {iconsSchema, topicInputSchema} from '../map/schemas';
 import {resolveTopic, resolveTopics, TOPIC_ARGS, type RefArgNames, type TopicRef} from './topicRef';
 
 export const SERVER_INFO = {name: 'thinking-patterns', version: '0.1.0'};
@@ -23,9 +24,10 @@ The map is stored in a Markdown file (see get_map_info). Change tools return aft
 
 export const NO_FILE_MESSAGE = 'No map file is open. Ask the user to open one in the app.';
 
-/** A topic as tools return it: text, note and nested children. */
+/** A topic as tools return it: text, icons, note and nested children. */
 export interface TopicTree {
     text: string;
+    icons?: string[];
     collapsed?: true;
     note?: string;
     children?: TopicTree[];
@@ -34,6 +36,7 @@ export interface TopicTree {
 function topicTree(tree: MindMapTree, id: NodeId): TopicTree {
     const n = tree.nodes[id];
     const v: TopicTree = {text: n.text};
+    if (n.icons?.length) v.icons = [...n.icons];
     if (n.collapsed) v.collapsed = true;
     if (n.note) v.note = n.note;
     if (n.children.length) v.children = n.children.map((c) => topicTree(tree, c));
@@ -159,6 +162,19 @@ export function registerTools(server: McpServer, workspace: MapWorkspace) {
     );
 
     server.registerTool(
+        'list_icons',
+        {
+            title: 'List icons',
+            description:
+                'Returns the icons a topic can have, by group: shortcodes (use them in "icons") and emoji. A topic ' +
+                'has at most one icon per group.',
+            inputSchema: {},
+            annotations: READ,
+        },
+        () => run(() => ICON_GROUPS.map((g) => ({group: g.label, icons: g.icons.map((i) => `${i.code} ${i.emoji}`)}))),
+    );
+
+    server.registerTool(
         'get_topic',
         {
             title: 'Get topic',
@@ -264,10 +280,11 @@ export function registerTools(server: McpServer, workspace: MapWorkspace) {
         'update_topic',
         {
             title: 'Update topic',
-            description: 'Changes the text or the note of a topic, folds it or unfolds it.',
+            description: 'Changes the text, the icons or the note of a topic, folds it or unfolds it.',
             inputSchema: {
                 ...refArgs(TOPIC_ARGS, 'the topic'),
                 text: z.string().min(1).optional().describe('New text.'),
+                icons: iconsSchema.optional().describe('New icons (replace all). An empty list removes them.'),
                 collapsed: z.boolean().optional().describe('true folds the topic (hides its subtopics).'),
                 note: z
                     .string()
@@ -279,19 +296,30 @@ export function registerTools(server: McpServer, workspace: MapWorkspace) {
         (input) =>
             change(() => {
                 const id = topic(input);
-                if (input.text === undefined && input.collapsed === undefined && input.note === undefined) {
-                    throw new MapError('Give "text", "collapsed" or "note".');
+                if (
+                    input.text === undefined &&
+                    input.icons === undefined &&
+                    input.collapsed === undefined &&
+                    input.note === undefined
+                ) {
+                    throw new MapError('Give "text", "icons", "collapsed" or "note".');
                 }
                 if (input.collapsed && !doc.tree.nodes[id].children.length) {
                     throw new MapError('A topic without subtopics cannot fold.');
                 }
                 const ops: MapOp[] = [];
                 if (input.text !== undefined) ops.push({op: 'setText', id, text: input.text});
+                if (input.icons !== undefined) ops.push({op: 'setIcons', id, icons: normalizeIcons(input.icons)});
                 if (input.collapsed !== undefined) ops.push({op: 'setCollapsed', id, collapsed: input.collapsed});
                 if (input.note !== undefined) ops.push({op: 'setNote', id, note: input.note.trim()});
                 doc.apply(ops);
                 const n = doc.tree.nodes[id];
-                return {path: path(id), collapsed: !!n.collapsed, ...(n.note ? {note: n.note} : {})};
+                return {
+                    path: path(id),
+                    collapsed: !!n.collapsed,
+                    ...(n.icons?.length ? {icons: n.icons} : {}),
+                    ...(n.note ? {note: n.note} : {}),
+                };
             }),
     );
 

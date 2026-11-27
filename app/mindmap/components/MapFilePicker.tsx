@@ -3,14 +3,15 @@ import {createMapFilesApi, type MapFilesApi} from '../sync/mapFilesApi';
 import type {DirListing, FileState} from '../sync/protocol';
 import '../mapFile.css';
 
-const SUFFIX = '.map.md';
+/** Any Markdown file can hold a map. A new name without one of these extensions gets `.md`. */
+const MARKDOWN_FILE = /\.(md|markdown)$/i;
 
 export interface MapFilePickerProps {
-    /** `null`: no file is open, and the picker cannot be dismissed. */
+    /** `null`: no file is open. Closing the picker then leaves the map unsaved until a file is opened. */
     currentFile: FileState | null;
     /** Called after `POST /api/map/open` succeeds. */
     onOpened(file: FileState): void;
-    /** Closes the picker. Disabled while `currentFile` is `null`. */
+    /** Closes the picker (close button or Escape). */
     onCancel(): void;
     /** REST calls. Default: the server of the page. Stories pass a fake. */
     api?: MapFilesApi;
@@ -31,7 +32,7 @@ function crumbs(listing: DirListing): {name: string; path: string}[] {
 
 /**
  * Picks the map file from a listing of the server's maps directory and opens it by its absolute path (D11). It can
- * also create a new map. Switching away from an `invalid` or `missing` file drops the unwritten changes, so the
+ * also create a new map. Any `.md` / `.markdown` file can be opened. Switching away from an `invalid` or `missing` file drops the unwritten changes, so the
  * picker asks first.
  */
 export function MapFilePicker({currentFile, onOpened, onCancel, api: givenApi}: MapFilePickerProps) {
@@ -41,7 +42,6 @@ export function MapFilePicker({currentFile, onOpened, onCancel, api: givenApi}: 
     const [busy, setBusy] = useState(false);
     const [newName, setNewName] = useState('');
     const [confirm, setConfirm] = useState<{path: string; create: boolean} | null>(null);
-    const dismissable = currentFile !== null;
     const risky = currentFile?.state === 'invalid' || currentFile?.state === 'missing';
 
     const load = useCallback(
@@ -61,13 +61,12 @@ export function MapFilePicker({currentFile, onOpened, onCancel, api: givenApi}: 
     }, []);
 
     useEffect(() => {
-        if (!dismissable) return;
         const onKey = (e: KeyboardEvent) => {
             if (e.key === 'Escape') onCancel();
         };
         window.addEventListener('keydown', onKey);
         return () => window.removeEventListener('keydown', onKey);
-    }, [dismissable, onCancel]);
+    }, [onCancel]);
 
     const open = (path: string, create: boolean, confirmed = false) => {
         if (path === currentFile?.path && !create) return onCancel();
@@ -91,7 +90,7 @@ export function MapFilePicker({currentFile, onOpened, onCancel, api: givenApi}: 
         e.preventDefault();
         const name = newName.trim();
         if (!listing || !name) return;
-        const file = name.endsWith(SUFFIX) ? name : `${name}${SUFFIX}`;
+        const file = MARKDOWN_FILE.test(name) ? name : `${name}.md`;
         open(`${listing.dir}${sepOf(listing.dir)}${file}`, true);
     };
 
@@ -100,11 +99,27 @@ export function MapFilePicker({currentFile, onOpened, onCancel, api: givenApi}: 
             <div className="mf-dialog" role="dialog" aria-modal="true" aria-labelledby="mf-title">
                 <header className="mf-dialog__header">
                     <h2 id="mf-title">Open a map file</h2>
-                    {dismissable && (
-                        <button type="button" className="mf-button" data-testid="picker-cancel" onClick={onCancel}>
-                            Cancel
-                        </button>
-                    )}
+                    <button
+                        type="button"
+                        className="mf-close"
+                        title="Close"
+                        aria-label="Close"
+                        data-testid="picker-close"
+                        onClick={onCancel}
+                    >
+                        <svg
+                            viewBox="0 0 24 24"
+                            width="16"
+                            height="16"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            aria-hidden
+                        >
+                            <path d="M6 6l12 12M18 6L6 18" />
+                        </svg>
+                    </button>
                 </header>
 
                 {listing && (
@@ -179,7 +194,7 @@ export function MapFilePicker({currentFile, onOpened, onCancel, api: givenApi}: 
                             </li>
                         ))}
                         {listing && listing.entries.length === 0 && (
-                            <li className="mf-empty">No folders or .map.md files here.</li>
+                            <li className="mf-empty">No folders or Markdown files here.</li>
                         )}
                     </ul>
                 )}
@@ -189,11 +204,10 @@ export function MapFilePicker({currentFile, onOpened, onCancel, api: givenApi}: 
                     <input
                         id="mf-new-name"
                         data-testid="picker-new-name"
-                        placeholder="name"
+                        placeholder="name.md"
                         value={newName}
                         onChange={(e) => setNewName(e.target.value)}
                     />
-                    <span className="mf-new__suffix">{SUFFIX}</span>
                     <button
                         type="submit"
                         className="mf-button mf-button--primary"

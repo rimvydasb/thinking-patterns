@@ -1,4 +1,5 @@
 import {z} from 'zod';
+import {isIconCode} from '../../app/mindmap/model/icons';
 import type {MapOp} from '../../app/mindmap/model/ops';
 import type {Outline} from '../../app/mindmap/model/types';
 
@@ -13,7 +14,16 @@ export const mapOpSchema = z.discriminatedUnion('op', [
     z.object({op: z.literal('setText'), id, text: z.string()}),
     z.object({op: z.literal('setCollapsed'), id, collapsed: z.boolean()}),
     z.object({op: z.literal('setNote'), id, note: z.string()}),
+    z.object({op: z.literal('setIcons'), id, icons: z.array(z.string().refine(isIconCode, 'Unknown icon'))}),
 ]) satisfies z.ZodType<MapOp>;
+
+/** Icon shortcodes of a topic, as agents give them. */
+export const iconsSchema = z
+    .array(z.string().refine(isIconCode, 'Unknown icon. Use a shortcode such as "star" (see list_icons).'))
+    .describe(
+        'Icon shortcodes shown in front of the topic, without colons, e.g. ["one", "star"]. At most one per ' +
+            'group; see the list_icons tool.',
+    );
 
 /** A nested topic as agents write it. */
 export const topicInputSchema: z.ZodType<Outline> = z.lazy(() =>
@@ -21,6 +31,7 @@ export const topicInputSchema: z.ZodType<Outline> = z.lazy(() =>
         text: z.string().min(1).describe('Topic text. Use \\n for a line break.'),
         collapsed: z.boolean().optional().describe('Show the topic folded (its children hidden).'),
         note: z.string().optional().describe('Markdown note of the topic.'),
+        icons: iconsSchema.optional(),
         children: z.array(topicInputSchema).optional(),
     }),
 );

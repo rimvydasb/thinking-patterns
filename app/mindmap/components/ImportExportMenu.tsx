@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState, type ChangeEvent} from 'react';
-import {exportFileName, exportMarkdown, importMarkdown, titleFromFileName} from '../model/importExport';
+import {exportFileName, exportMarkdown, importMarkdown} from '../model/importExport';
 import type {MindMapStore} from '../store/mindmapStore';
 import '../importExport.css';
 
@@ -18,10 +18,11 @@ function download(text: string, fileName: string) {
 }
 
 /**
- * Top-right import / export button with a menu. Everything runs in the browser: export downloads the map as a
- * `.map.md` file, import reads a local Markdown file and replaces the map (one undo step).
+ * Top-right import / export button with a menu. Import and export run in the browser: export downloads the map as a
+ * Markdown file, import reads a local Markdown file and replaces the map (one undo step). `onOpenFile` adds an
+ * "Open file…" item (the server's file picker); it is left out when the app runs without a server.
  */
-export function ImportExportMenu({store}: {store: MindMapStore}) {
+export function ImportExportMenu({store, onOpenFile}: {store: MindMapStore; onOpenFile?(): void}) {
     const [open, setOpen] = useState(false);
     const [message, setMessage] = useState<{text: string; error: boolean} | null>(null);
     const rootRef = useRef<HTMLDivElement>(null);
@@ -69,7 +70,7 @@ export function ImportExportMenu({store}: {store: MindMapStore}) {
         if (!file) return;
         try {
             const text = await file.text();
-            const result = importMarkdown(text, store.getState().tree, titleFromFileName(file.name));
+            const result = importMarkdown(text, store.getState().tree);
             if (!result.ok) {
                 setMessage({text: `Cannot import ${file.name}: ${result.error}`, error: true});
                 return;
@@ -112,6 +113,24 @@ export function ImportExportMenu({store}: {store: MindMapStore}) {
             </button>
             {open && (
                 <div className="ie-popup" role="menu" aria-label="Import / export">
+                    {onOpenFile && (
+                        <>
+                            <button
+                                type="button"
+                                role="menuitem"
+                                className="ie-item"
+                                data-testid="menu-open-file"
+                                onMouseDown={preventFocusSteal}
+                                onClick={() => {
+                                    setOpen(false);
+                                    onOpenFile();
+                                }}
+                            >
+                                Open file…
+                            </button>
+                            <div className="ie-sep" role="separator" />
+                        </>
+                    )}
                     <button
                         type="button"
                         role="menuitem"

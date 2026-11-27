@@ -45,6 +45,10 @@ body,
   color: #1d2433;
   background: #eef0f3;
 }
+.app-file--unsaved {
+  background: #fdf0d5;
+  color: #8a4b0f;
+}
 .app-file--writing {
   background: #fdf0d5;
 }

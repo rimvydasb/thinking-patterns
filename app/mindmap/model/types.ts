@@ -8,6 +8,8 @@ export interface MindNode {
     collapsed?: boolean;
     /** Free Markdown text about the topic (the `# Notes` section of the map file). Absent when empty. */
     note?: string;
+    /** Icon shortcodes shown in front of the text (see `icons.ts`), at most one per group. Absent when none. */
+    icons?: string[];
 }
 
 /** Normalized, immutable mind map. Every operation returns a new tree. */
@@ -21,6 +23,7 @@ export interface Outline {
     text: string;
     collapsed?: boolean;
     note?: string;
+    icons?: string[];
     children?: Outline[];
 }
 

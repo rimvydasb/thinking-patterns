@@ -1,5 +1,6 @@
 import {createContext, useContext} from 'react';
 import {createStore, useStore, type StoreApi} from 'zustand';
+import {isIconCode, toggleIcon} from '../model/icons';
 import {applyOps, type MapOp} from '../model/ops';
 import * as T from '../model/tree';
 import type {ArrowKey} from '../model/tree';
@@ -55,6 +56,11 @@ export interface MindMapState {
      */
     resolvePending(id: NodeId, text: string | null, more?: readonly string[]): void;
     deleteSelected(): void;
+    /**
+     * Picks an icon for the selected topics (one undo step), see `toggleIcon`: if the focused topic has the icon,
+     * it is removed from all selected topics; else it is set on all of them, replacing an icon of the same group.
+     */
+    pickIcon(code: string): void;
     toggleCollapse(id?: NodeId): void;
     moveSelected(delta: number): void;
     /** Re-parents a topic (with its subtree) as the last child of `parentId`, and selects it. Refuses cycles. */
@@ -219,6 +225,22 @@ export function createMindMapStore(opts: CreateStoreOptions = {}): MindMapStore 
                 if (selectedId === tree.rootId) return;
                 const r = T.removeNode(tree, selectedId);
                 commit(r.tree, {selectedId: r.nextSelection, editing: null});
+            },
+
+            pickIcon: (code) => {
+                const {tree, selectedId, selectedIds} = get();
+                if (!isIconCode(code)) return;
+                const remove = !!tree.nodes[selectedId]?.icons?.includes(code);
+                let next = tree;
+                for (const id of selectedIds) {
+                    const icons = next.nodes[id].icons ?? [];
+                    next = T.setIcons(
+                        next,
+                        id,
+                        remove ? icons.filter((c) => c !== code) : toggleIcon(icons, code, true),
+                    );
+                }
+                commit(next);
             },
 
             toggleCollapse: (id) => {

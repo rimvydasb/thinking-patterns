@@ -7,6 +7,7 @@ import {SettingsDialog} from './ai/SettingsDialog';
 import {useBridgeStatus} from './ai/useBridgeStatus';
 import {createMindMapStore, MindMap, useMindMapState} from './mindmap';
 import {FileStatusBanner} from './mindmap/components/FileStatusBanner';
+import {IconPanel, IconPanelButton} from './mindmap/components/IconPanel';
 import {ImportExportMenu} from './mindmap/components/ImportExportMenu';
 import {MapFilePicker} from './mindmap/components/MapFilePicker';
 import {createTree, fromOutline} from './mindmap/model/tree';
@@ -20,8 +21,9 @@ import {connectSync, type SyncClient, type SyncStatus} from './mindmap/sync/sync
  * Stand-alone app.
  *
  * Query params:
- * - Default: the app syncs its map with the server, which stores it in a `.map.md` file. Agents (MCP) see the map
- *   and their changes show at once. The user picks the file in the app; the app reopens it after a restart.
+ * - Default: the app syncs its map with the server, which stores it in a Markdown mind map file. Agents (MCP) see
+ *   the map and their changes show at once. The app starts with a `Central Topic` draft (or reopens the last file);
+ *   the user opens a file from the import / export menu ("Open file…").
  * - `?sample=<name>` or `?offline`: in-memory only, no server (demos and e2e tests).
  * - `?layout=mindmap|logic|org`.
  */
@@ -39,9 +41,11 @@ export function App() {
         }),
     );
     const [status, setStatus] = useState<SyncStatus | null>(offline ? null : 'connecting');
-    /** `undefined`: not known yet; `null`: no file open (the picker shows and cannot be dismissed). */
+    /** `undefined`: not known yet; `null`: no file open (the map is not saved). */
     const [file, setFile] = useState<FileState | null | undefined>(undefined);
+    /** The picker opens only on request (menu "Open file…"). Without a file the map is a `Central Topic` draft. */
     const [pickerOpen, setPickerOpen] = useState(false);
+    const [iconsOpen, setIconsOpen] = useState(false);
     const [client, setClient] = useState<SyncClient | null>(null);
 
     const [aiSettings, setAiSettings] = useState<AiSettings>(loadAiSettings);
@@ -91,23 +95,11 @@ export function App() {
         return () => c.close();
     }, [offline, store]);
 
-    const fileControls = !offline && (
+    const fileControls = file && (
         <div className="mm-group mf-toolbar-file" role="group" aria-label="Map file">
-            <button
-                type="button"
-                className="mm-btn"
-                title="Open or create a map file"
-                data-testid="open-file"
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => setPickerOpen(true)}
-            >
-                Open…
-            </button>
-            {file && (
-                <span className="mf-toolbar-file__path" title={file.path} data-testid="file-path">
-                    {file.path}
-                </span>
-            )}
+            <span className="mf-toolbar-file__path" title={file.path} data-testid="file-path">
+                {file.path}
+            </span>
         </div>
     );
 
@@ -124,6 +116,15 @@ export function App() {
             />
             <GenerationProgress count={generatingCount} error={aiError} />
             <div className="app-status">
+                {file === null && (
+                    <div
+                        className="app-file app-file--unsaved"
+                        data-testid="file-status"
+                        title="No map file is open. Open a file to save the map, or export it."
+                    >
+                        Not saved
+                    </div>
+                )}
                 {file && (file.state === 'clean' || file.state === 'writing') && (
                     <div className={`app-file app-file--${file.state}`} data-testid="file-status">
                         {file.state === 'clean' ? 'Saved' : 'Saving…'}
@@ -134,14 +135,12 @@ export function App() {
                         {status === 'online' ? 'Live' : status === 'connecting' ? 'Connecting…' : 'Offline'}
                     </div>
                 )}
-                <AiStatusChip
-                    status={bridgeStatus}
-                    model={aiSettings.model}
-                    onClick={() => setSettingsOpen(true)}
-                />
+                <AiStatusChip status={bridgeStatus} model={aiSettings.model} onClick={() => setSettingsOpen(true)} />
                 <SettingsButton onClick={() => setSettingsOpen(true)} />
-                <ImportExportMenu store={store} />
+                <IconPanelButton open={iconsOpen} onToggle={() => setIconsOpen((o) => !o)} />
+                <ImportExportMenu store={store} onOpenFile={offline ? undefined : () => setPickerOpen(true)} />
             </div>
+            {iconsOpen && <IconPanel store={store} />}
             {settingsOpen && (
                 <SettingsDialog
                     settings={aiSettings}
@@ -154,7 +153,7 @@ export function App() {
                 />
             )}
             {file && client && <FileStatusBanner file={file} onWrite={() => client.writeFile()} />}
-            {(file === null || pickerOpen) && (
+            {pickerOpen && (
                 <MapFilePicker
                     currentFile={file ?? null}
                     onOpened={(opened) => {

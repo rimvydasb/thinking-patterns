@@ -1,4 +1,5 @@
-import {exportFileName, exportMarkdown, importMarkdown, titleFromFileName} from './importExport';
+import {exportFileName, exportMarkdown, importMarkdown} from './importExport';
+import {NOT_A_MIND_MAP} from './mapFile/parse';
 import {createTree, fromOutline, toOutline} from './tree';
 
 describe('markdown import / export', () => {
@@ -25,35 +26,27 @@ describe('markdown import / export', () => {
         expect(result.ok && toOutline(result.tree)).toEqual(toOutline(tree));
     });
 
-    it('imports a plain Markdown list', () => {
-        const result = importMarkdown('- Root\n  - A\n  - B\n', createTree());
-        expect(result.ok && toOutline(result.tree)).toEqual({text: 'Root', children: [{text: 'A'}, {text: 'B'}]});
+    it('refuses a Markdown file without the mindmap: 1 flag', () => {
+        const notMap = {ok: false, error: NOT_A_MIND_MAP};
+        expect(importMarkdown('- Root\n  - A\n', createTree())).toEqual(notMap);
+        expect(importMarkdown('---\ntitle: x\n---\n\n# Map\n\n- A\n', createTree())).toEqual(notMap);
+        expect(importMarkdown('# Map\n\n---\nmindmap: 1\n---\n', createTree())).toEqual(notMap);
     });
 
-    it('puts several top-level items under a central topic named after the file', () => {
-        const result = importMarkdown('# One\n- A\n# Two\n', createTree(), 'Notes');
-        expect(result.ok && toOutline(result.tree)).toEqual({
-            text: 'Notes',
-            children: [{text: 'One', children: [{text: 'A'}]}, {text: 'Two'}],
+    it('reports a parse error for a mind map file without a "# Map" section', () => {
+        expect(importMarkdown('---\nmindmap: 1\n---\n\n# Notes\n', createTree())).toEqual({
+            ok: false,
+            error: 'Line 1: The file must have exactly one "# Map" section.',
         });
     });
 
-    it('reports an invalid map file', () => {
-        const result = importMarkdown('# Map\n\n- A\n- B\n', createTree());
+    it('reports other parse errors of a mind map file', () => {
+        const result = importMarkdown('---\nmindmap: 1\n---\n\n# Map\n\n- A\n- B\n', createTree());
         expect(result.ok).toBe(false);
     });
 
-    it('reports a file without topics', () => {
-        expect(importMarkdown('just text\n', createTree())).toEqual({
-            ok: false,
-            error: 'The file contains no list items or headings.',
-        });
-    });
-
     it('derives file names', () => {
-        expect(exportFileName(createTree('a/b: c?'))).toBe('a b c.map.md');
-        expect(exportFileName(createTree('  '))).toBe('mindmap.map.md');
-        expect(titleFromFileName('Ideas.map.md')).toBe('Ideas');
-        expect(titleFromFileName('notes.markdown')).toBe('notes');
+        expect(exportFileName(createTree('a/b: c?'))).toBe('a b c.md');
+        expect(exportFileName(createTree('  '))).toBe('mindmap.md');
     });
 });

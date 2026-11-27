@@ -61,11 +61,30 @@ describe('MapWorkspace', () => {
         await expect(workspace.open('/elsewhere/c.map.md')).rejects.toMatchObject({status: 400});
         await expect(workspace.open('/maps/../elsewhere/c.map.md')).rejects.toMatchObject({status: 400});
         await expect(workspace.open('/maps/missing.map.md')).rejects.toMatchObject({status: 404});
-        await expect(workspace.open('/maps/a.md')).rejects.toMatchObject({status: 400});
+        await expect(workspace.open('/maps/a.txt')).rejects.toMatchObject({status: 400});
+        await expect(workspace.open('/maps/.md', {create: true})).rejects.toMatchObject({status: 400});
         await expect(workspace.open('/maps/.map.md', {create: true})).rejects.toMatchObject({status: 400});
         await expect(workspace.listDir('/elsewhere')).rejects.toMatchObject({status: 400});
         await workspace.open('/elsewhere/c.map.md', {trusted: true});
         expect(workspace.current()!.fileState().path).toBe('/elsewhere/c.map.md');
+        await workspace.close();
+    });
+
+    it('lists and opens any Markdown file, not only .map.md', async () => {
+        const {fs, workspace} = setup();
+        fs.writeExternal('/maps/notes.md', text('Notes'), {silent: true});
+        fs.writeExternal('/maps/Ideas.markdown', text('Ideas'), {silent: true});
+        fs.writeExternal('/maps/todo.txt', 'x', {silent: true});
+        fs.writeExternal('/maps/.hidden.md', 'x', {silent: true});
+        const listing = await workspace.listDir();
+        expect(listing.entries.map((e) => e.name)).toEqual(['a.map.md', 'b.map.md', 'Ideas.markdown', 'notes.md']);
+        await workspace.open('/maps/notes.md');
+        expect(workspace.current()!.doc.tree.nodes[workspace.current()!.doc.tree.rootId].text).toBe('Notes');
+        fs.writeExternal('/maps/readme.md', '# Readme\n', {silent: true});
+        await expect(workspace.open('/maps/readme.md')).rejects.toMatchObject({status: 400});
+        expect(workspace.current()!.fileState().path).toBe('/maps/notes.md');
+        await workspace.open('/maps/plan.md', {create: true});
+        expect(fs.text('/maps/plan.md')).toBe(text('Central Topic'));
         await workspace.close();
     });
 });

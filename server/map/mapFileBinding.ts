@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import path from 'node:path';
-import {parseMapFile} from '../../app/mindmap/model/mapFile/parse';
+import {isMindMapFile, NOT_A_MIND_MAP, parseMapFile} from '../../app/mindmap/model/mapFile/parse';
 import {reconcileTrees} from '../../app/mindmap/model/mapFile/reconcile';
 import {newMapFileModel, serializeMapFile} from '../../app/mindmap/model/mapFile/serialize';
 import type {Diagnostic, MapFileModel} from '../../app/mindmap/model/mapFile/types';
@@ -40,7 +40,7 @@ export interface MapFileBinding {
     close(): Promise<void>;
 }
 
-export type MapFileErrorCode = 'not-found' | 'exists';
+export type MapFileErrorCode = 'not-found' | 'exists' | 'not-mindmap';
 
 /** Opening a map file failed. */
 export class MapFileError extends MapError {
@@ -60,7 +60,11 @@ export interface OpenMapFileOptions {
     create?: boolean;
 }
 
-/** Opens a map file. Rejects with `MapFileError` if it does not exist (or exists, with `create`). */
+/**
+ * Opens a map file. Rejects with `MapFileError` if it does not exist (or exists, with `create`), or if it is a
+ * Markdown file without the `mindmap: 1` frontmatter flag (`not-mindmap`). A file with the flag but a broken map
+ * (for example no `# Map` section) opens in the `invalid` state with its parse errors.
+ */
 export async function openMapFile(filePath: string, opts: OpenMapFileOptions = {}): Promise<MapFileBinding> {
     const fs = opts.fs ?? new NodeFsPort();
     if (opts.create) {
@@ -70,6 +74,7 @@ export async function openMapFile(filePath: string, opts: OpenMapFileOptions = {
     const stat = await fs.stat(filePath);
     if (!stat) throw new MapFileError(`The file does not exist: ${filePath}`, 'not-found');
     const text = await fs.read(filePath);
+    if (!isMindMapFile(text)) throw new MapFileError(`${NOT_A_MIND_MAP} ${filePath}`, 'not-mindmap');
     const binding = new FileBinding(filePath, fs, text, stat);
     binding.start(opts.pollMs ?? 1000);
     return binding;

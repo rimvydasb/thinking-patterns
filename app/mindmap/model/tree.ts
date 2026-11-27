@@ -1,3 +1,4 @@
+import {sameIcons} from './icons';
 import type {LayoutKind, MindMapTree, MindNode, NodeId, Outline, Side} from './types';
 
 let idCounter = 0;
@@ -31,6 +32,7 @@ export function fromOutline(outline: Outline): MindMapTree {
             children,
             ...(o.collapsed ? {collapsed: true} : {}),
             ...(o.note ? {note: o.note} : {}),
+            ...(o.icons?.length ? {icons: [...o.icons]} : {}),
         };
         (o.children ?? []).forEach((c, i) => visit(c, children[i], id));
     };
@@ -43,6 +45,7 @@ export function toOutline(tree: MindMapTree, id: NodeId = tree.rootId): Outline 
     const out: Outline = {text: n.text};
     if (n.collapsed) out.collapsed = true;
     if (n.note) out.note = n.note;
+    if (n.icons?.length) out.icons = [...n.icons];
     if (n.children.length) out.children = n.children.map((c) => toOutline(tree, c));
     return out;
 }
@@ -228,6 +231,14 @@ export function updateText(tree: MindMapTree, id: NodeId, text: string): MindMap
     const node = getNode(tree, id);
     if (node.text === text) return tree;
     return withNodes(tree, {[id]: {...node, text}});
+}
+
+/** Sets the icons of a topic. An empty list removes them. */
+export function setIcons(tree: MindMapTree, id: NodeId, icons: readonly string[]): MindMapTree {
+    const node = getNode(tree, id);
+    if (sameIcons(node.icons, icons)) return tree;
+    const {icons: _drop, ...rest} = node;
+    return withNodes(tree, {[id]: icons.length ? {...rest, icons: [...icons]} : rest});
 }
 
 export function setCollapsed(tree: MindMapTree, id: NodeId, collapsed: boolean): MindMapTree {

@@ -204,6 +204,7 @@ Measured with k6 in the nightly pipeline.
 | `# Map` | MUST exist once and MUST hold exactly one top-level bullet: the central topic. | Error |
 | List | Bullets `-`, `*`, `+`, `1.`. Any consistent indentation. Indented non-bullet lines continue the topic text. | Error for text that is not in a list item |
 | Topic text | Inline Markdown is kept verbatim. The serializer escapes a leading `-`, `*`, `+`, `#` or `1.` with `\`. | - |
+| Topic icons | GitHub emoji shortcodes in front of the topic text: `- :one: :star: Launch`. Only shortcodes of the icon catalog ([icons.ts](../app/mindmap/model/icons.ts)) are icons, at most one per group; other shortcodes stay text. The serializer escapes text that starts with a catalog shortcode with `\`. Note headings use the text without icons. | - |
 | `# Notes` | Optional. Each `## <heading>` starts the note of one topic. The note ends at the next `#` or `##` heading outside a code fence. | - |
 | Note heading | Topic text, or the shortest unique trailing path joined with `>`. Matching uses the `topicPath` rules (case and whitespace do not matter). | Warning: the note is an orphan |
 | Other `#` sections | Kept verbatim, written after `# Notes`. | - |

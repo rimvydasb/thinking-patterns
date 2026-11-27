@@ -121,7 +121,7 @@ export async function computeLayout(
     const depths = new Map<NodeId, number>();
     const measureSubtree = (id: NodeId, depth: number, side: Side | null) => {
         const n = getNode(tree, id);
-        sizes.set(id, measureTopic(n.text, depth, measure));
+        sizes.set(id, measureTopic(n.text, depth, measure, n.icons?.length ?? 0));
         depths.set(id, depth);
         if (side) sideOfNode.set(id, side);
         if (!n.collapsed) n.children.forEach((c) => measureSubtree(c, depth + 1, side));
@@ -178,7 +178,7 @@ export function withProvisionalNodes(
             const parent = nodes[n.parentId];
             const side = sideOf(tree, id, kind);
             const depth = parent.depth + 1;
-            const size = measureTopic(n.text, depth, measure);
+            const size = measureTopic(n.text, depth, measure, n.icons?.length ?? 0);
             const siblings = getNode(tree, n.parentId)
                 .children.map((c) => nodes[c])
                 .filter(Boolean);

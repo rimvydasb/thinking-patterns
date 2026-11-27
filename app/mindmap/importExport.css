@@ -56,6 +56,12 @@
   outline: none;
 }
 
+.ie-sep {
+  height: 1px;
+  margin: 4px 2px;
+  background: #eef0f3;
+}
+
 .ie-toast {
   position: absolute;
   top: calc(100% + 6px);

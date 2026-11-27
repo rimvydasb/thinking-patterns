@@ -49,14 +49,30 @@ export function fontFor(depth: number): string {
     return `${s.fontWeight} ${s.fontSize}px ${FONT_FAMILY}`;
 }
 
-/** Outer size of a topic box (text + padding). Must match the CSS in TopicNode. */
-export function measureTopic(text: string, depth: number, measure: TextWidthFn = canvasTextWidth): Size {
+/** Box of one icon in front of the topic text, and the gap after the icons. Must match TopicNode. */
+export function iconMetrics(depth: number): {size: number; box: number; gap: number} {
+    const {fontSize} = topicStyle(depth);
+    const size = Math.round(fontSize * 1.05);
+    return {size, box: Math.round(fontSize * 1.3), gap: Math.round(fontSize * 0.35)};
+}
+
+/** Width of the icon row in front of the text (0 without icons). */
+export function iconsWidth(depth: number, count: number): number {
+    if (!count) return 0;
+    const m = iconMetrics(depth);
+    return count * m.box + m.gap;
+}
+
+/** Outer size of a topic box (icons + text + padding). Must match the CSS in TopicNode. */
+export function measureTopic(text: string, depth: number, measure: TextWidthFn = canvasTextWidth, iconCount = 0): Size {
     const s = topicStyle(depth);
     const font = fontFor(depth);
     const lines = wrapText(text || ' ', s.maxTextWidth, font, measure);
     const textWidth = Math.min(s.maxTextWidth, Math.max(...lines.map((l) => measure(l, font))));
     // +4px slack so the browser never wraps earlier than our estimate.
-    const width = Math.ceil(Math.max(s.minWidth, textWidth + 4 + s.padX * 2));
-    const height = Math.ceil(lines.length * s.fontSize * s.lineHeight + s.padY * 2);
+    const width = Math.ceil(Math.max(s.minWidth, iconsWidth(depth, iconCount) + textWidth + 4 + s.padX * 2));
+    const textHeight = lines.length * s.fontSize * s.lineHeight;
+    const iconHeight = iconCount ? iconMetrics(depth).box : 0;
+    const height = Math.ceil(Math.max(textHeight, iconHeight) + s.padY * 2);
     return {width, height};
 }

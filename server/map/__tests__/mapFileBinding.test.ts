@@ -82,7 +82,7 @@ describe('openMapFile', () => {
     });
 
     it('opens an invalid file in the invalid state with the diagnostics', async () => {
-        const {binding} = await setup('# Map\n\n- A\n');
+        const {binding} = await setup('---\nmindmap: 1\n---\n\n# Map\n\n- A\n- B\n');
         expect(binding.fileState().state).toBe('invalid');
         expect(binding.fileState().diagnostics[0].severity).toBe('error');
     });
@@ -97,6 +97,23 @@ describe('openMapFile', () => {
             code: 'exists',
         });
         await expect(openMapFile('/maps/none.map.md', {fs, pollMs: 0})).rejects.toMatchObject({code: 'not-found'});
+    });
+
+    it('refuses a Markdown file without the mindmap: 1 flag, and opens one without "# Map" as invalid', async () => {
+        const fs = new MemoryFsPort();
+        fs.writeExternal('/maps/readme.md', '# Readme\n\n- A list\n', {silent: true});
+        fs.writeExternal('/maps/other.md', '---\ntitle: x\n---\n\n# Map\n\n- A\n', {silent: true});
+        fs.writeExternal('/maps/broken.md', '---\nmindmap: 1\n---\n\n# Notes\n', {silent: true});
+        for (const p of ['/maps/readme.md', '/maps/other.md']) {
+            await expect(openMapFile(p, {fs, pollMs: 0})).rejects.toMatchObject({code: 'not-mindmap'});
+        }
+        expect(fs.text('/maps/readme.md')).toBe('# Readme\n\n- A list\n');
+        const b = await openMapFile('/maps/broken.md', {fs, pollMs: 0});
+        bindings.push(b);
+        expect(b.fileState()).toMatchObject({
+            state: 'invalid',
+            diagnostics: [{line: 1, severity: 'error', message: 'The file must have exactly one "# Map" section.'}],
+        });
     });
 });
 

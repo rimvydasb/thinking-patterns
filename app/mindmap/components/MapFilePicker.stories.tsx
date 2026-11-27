@@ -53,7 +53,7 @@ const meta = {
 export default meta;
 type Story = StoryObj<typeof meta>;
 
-/** No file is open: the picker cannot be dismissed. The user browses into a folder and opens a file. */
+/** No file is open. The user browses into a folder and opens a file. */
 export const NoFileOpen: Story = {
     args: {api: fakeApi()},
     play: async ({canvasElement, args, step}) => {
@@ -67,10 +67,9 @@ export const NoFileOpen: Story = {
                 ]),
             );
         });
-        await step('cannot be dismissed', async () => {
-            await expect(c.queryByTestId('picker-cancel')).toBeNull();
-            await userEvent.keyboard('{Escape}');
-            await expect(args.onCancel).not.toHaveBeenCalled();
+        await step('can be closed (the map then stays unsaved)', async () => {
+            await userEvent.click(c.getByTestId('picker-close'));
+            await expect(args.onCancel).toHaveBeenCalledOnce();
         });
         await step('navigates into a folder and back with the breadcrumbs', async () => {
             await userEvent.click(c.getByText('archive'));
@@ -88,7 +87,7 @@ export const NoFileOpen: Story = {
     },
 };
 
-/** A file is open: the picker starts in its folder, marks it, and can be cancelled. */
+/** A file is open: the picker starts in its folder, marks it, and can be closed. */
 export const SwitchFile: Story = {
     args: {api: fakeApi(), currentFile: state(`${ROOT}/plan.map.md`)},
     play: async ({canvasElement, args}) => {
@@ -98,7 +97,7 @@ export const SwitchFile: Story = {
         );
         await userEvent.keyboard('{Escape}');
         await expect(args.onCancel).toHaveBeenCalledOnce();
-        await userEvent.click(c.getByTestId('picker-cancel'));
+        await userEvent.click(c.getByTestId('picker-close'));
         await expect(args.onCancel).toHaveBeenCalledTimes(2);
     },
 };
@@ -119,7 +118,7 @@ export const ConfirmSwitchFromInvalid: Story = {
     },
 };
 
-/** "New map" creates `<folder>/<name>.map.md`. */
+/** "New map" creates `<folder>/<name>.md`; a name that already ends in `.md` or `.markdown` is kept. */
 export const CreateNewMap: Story = {
     args: {api: fakeApi()},
     play: async ({canvasElement, args}) => {
@@ -128,7 +127,11 @@ export const CreateNewMap: Story = {
         await expect(c.getByTestId('picker-create')).toBeDisabled();
         await userEvent.type(c.getByTestId('picker-new-name'), 'ideas');
         await userEvent.click(c.getByTestId('picker-create'));
-        await waitFor(() => expect(args.api!.openFile).toHaveBeenCalledWith(`${ROOT}/ideas.map.md`, {create: true}));
+        await waitFor(() => expect(args.api!.openFile).toHaveBeenCalledWith(`${ROOT}/ideas.md`, {create: true}));
+        await userEvent.clear(c.getByTestId('picker-new-name'));
+        await userEvent.type(c.getByTestId('picker-new-name'), 'notes.markdown');
+        await userEvent.click(c.getByTestId('picker-create'));
+        await waitFor(() => expect(args.api!.openFile).toHaveBeenCalledWith(`${ROOT}/notes.markdown`, {create: true}));
         await waitFor(() => expect(args.onOpened).toHaveBeenCalled());
     },
 };

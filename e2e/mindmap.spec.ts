@@ -414,14 +414,14 @@ test.describe('AI brainstorming', () => {
 });
 
 test.describe('markdown import / export', () => {
-    test('exports the map as a .map.md download', async ({page}) => {
+    test('exports the map as a Markdown download', async ({page}) => {
         await open(page);
         await page.getByTestId('import-export').click();
         const [download] = await Promise.all([
             page.waitForEvent('download'),
             page.getByTestId('export-markdown').click(),
         ]);
-        expect(download.suggestedFilename()).toBe('Central Topic.map.md');
+        expect(download.suggestedFilename()).toBe('Central Topic.md');
         const chunks: Buffer[] = [];
         for await (const c of await download.createReadStream()) chunks.push(c as Buffer);
         expect(Buffer.concat(chunks).toString('utf8')).toBe('---\nmindmap: 1\n---\n\n# Map\n\n- Central Topic\n');
@@ -438,7 +438,7 @@ test.describe('markdown import / export', () => {
         await chooser.setFiles({
             name: 'ideas.md',
             mimeType: 'text/markdown',
-            buffer: Buffer.from('- Ideas\n  - First\n  - Second\n'),
+            buffer: Buffer.from('---\nmindmap: 1\n---\n\n# Map\n\n- Ideas\n  - First\n  - Second\n'),
         });
         await expect(page.getByTestId('import-status')).toHaveText('Imported ideas.md');
         await expect(topics(page)).toHaveCount(3);
@@ -449,15 +449,46 @@ test.describe('markdown import / export', () => {
         await expect(topic(page, 'Central Topic')).toBeVisible();
     });
 
-    test('shows an error for a file without topics', async ({page}) => {
+    test('refuses a Markdown file without the mindmap: 1 flag', async ({page}) => {
         await open(page);
         await page.getByTestId('import-export').click();
         const [chooser] = await Promise.all([
             page.waitForEvent('filechooser'),
             page.getByTestId('import-markdown').click(),
         ]);
-        await chooser.setFiles({name: 'empty.md', mimeType: 'text/markdown', buffer: Buffer.from('plain text\n')});
-        await expect(page.getByTestId('import-status')).toContainText('no list items or headings');
+        await chooser.setFiles({name: 'readme.md', mimeType: 'text/markdown', buffer: Buffer.from('- A list\n')});
+        await expect(page.getByTestId('import-status')).toContainText('This is not a mind map file');
         await expect(topics(page)).toHaveCount(1);
+    });
+});
+
+test.describe('topic icons', () => {
+    test('the top-right icon button opens a panel; icons replace within a group and add across groups', async ({
+        page,
+    }) => {
+        await open(page);
+        const toggle = page.getByTestId('icon-panel-toggle');
+        const panel = page.getByTestId('icon-panel');
+        const icons = selected(page).getByTestId('topic-icons').locator('[data-icon]');
+        await expect(panel).toHaveCount(0);
+
+        await toggle.click();
+        await expect(panel).toBeVisible();
+        await page.getByTestId('icon-one').click();
+        await page.getByTestId('icon-star').click();
+        await expect(icons).toHaveCount(2);
+        expect(await icons.evaluateAll((els) => els.map((e) => e.getAttribute('data-icon')))).toEqual(['one', 'star']);
+
+        // Same group: replaces "one" in place.
+        await page.getByTestId('icon-three').click();
+        expect(await icons.evaluateAll((els) => els.map((e) => e.getAttribute('data-icon')))).toEqual([
+            'three',
+            'star',
+        ]);
+        await expect(page.getByTestId('icon-three')).toHaveAttribute('aria-pressed', 'true');
+        await expect(page.getByTestId('mindmap')).toBeFocused();
+
+        await toggle.click();
+        await expect(panel).toHaveCount(0);
     });
 });

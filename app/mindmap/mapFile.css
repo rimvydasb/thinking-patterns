@@ -9,7 +9,12 @@
   justify-content: center;
   padding: 10vh 16px 16px;
   background: rgba(16, 24, 40, 0.35);
-  font: 14px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font:
+    14px/1.4 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
   color: #1d2433;
 }
 
@@ -33,6 +38,24 @@
 .mf-dialog__header h2 {
   margin: 0;
   font-size: 16px;
+}
+
+.mf-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #5b6475;
+  cursor: pointer;
+}
+.mf-close:hover {
+  background: #f3f5f9;
+  color: #1d2433;
 }
 
 .mf-crumbs {
@@ -109,16 +132,17 @@
   border-radius: 6px;
   font: inherit;
 }
-.mf-new__suffix {
-  color: #8a8f98;
-}
 
 .mf-button {
   border: 1px solid #d0d4dc;
   border-radius: 6px;
   background: #fff;
   padding: 6px 12px;
-  font: 500 13px/1.2 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font:
+    500 13px/1.2 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
   color: #1d2433;
   cursor: pointer;
 }
@@ -172,7 +196,11 @@
   border: 1px solid #f5c2a8;
   border-radius: 10px;
   box-shadow: 0 6px 18px rgba(16, 24, 40, 0.15);
-  font: 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font:
+    13px/1.4 -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    sans-serif;
   color: #1d2433;
 }
 .mf-banner__text {
@@ -182,7 +210,11 @@
 .mf-banner__path {
   margin-top: 2px;
   color: #5b6475;
-  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    12px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
   overflow-wrap: anywhere;
 }
 .mf-banner__list {
@@ -201,7 +233,11 @@
   background: rgba(255, 255, 255, 0.9);
   border-radius: 6px;
   color: #5b6475;
-  font: 12px ui-monospace, SFMono-Regular, Menlo, monospace;
+  font:
+    12px ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    monospace;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

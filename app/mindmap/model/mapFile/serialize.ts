@@ -1,3 +1,4 @@
+import {iconToken} from '../icons';
 import {createTree} from '../tree';
 import {shortestUniquePath} from '../topicPath';
 import type {MindMapTree, NodeId} from '../types';
@@ -6,7 +7,8 @@ import {DEFAULT_FRONTMATTER, type MapFileModel} from './types';
 
 /**
  * Writes the canonical form of a map file: LF line endings, a final newline, `-` bullets, 2 spaces per level, notes in
- * pre-order of the tree, then orphan notes, then the other sections. `collapsed` is a view state and is not written.
+ * pre-order of the tree, then orphan notes, then the other sections. Icons are `:shortcode:` tokens in front of the
+ * topic text (`- :one: :star: Topic`). `collapsed` is a view state and is not written.
  * Deterministic: the same model always gives the same text.
  */
 export function serializeMapFile(model: MapFileModel): string {
@@ -51,7 +53,8 @@ function mapList(tree: MindMapTree): string {
             .split('\n')
             .map((l) => l.trim())
             .filter((l) => l);
-        lines.push(`${pad}- ${escapeTopicLine(first)}`);
+        const icons = (tree.nodes[id].icons ?? []).map((c) => `${iconToken(c)} `).join('');
+        lines.push(`${pad}- ${icons}${escapeTopicLine(first)}`);
         for (const line of rest) lines.push(`${pad}  ${escapeTopicLine(line)}`);
         tree.nodes[id].children.forEach((c) => visit(c, depth + 1));
     };

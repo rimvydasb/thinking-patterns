@@ -1,3 +1,4 @@
+import {normalizeIcons, sameIcons} from './icons';
 import type {MindMapTree, MindNode, NodeId, Outline} from './types';
 
 /**
@@ -17,7 +18,9 @@ export type MapOp =
     | {op: 'setText'; id: NodeId; text: string}
     | {op: 'setCollapsed'; id: NodeId; collapsed: boolean}
     /** Sets the note of a topic. An empty string removes the note. */
-    | {op: 'setNote'; id: NodeId; note: string};
+    | {op: 'setNote'; id: NodeId; note: string}
+    /** Sets the icon shortcodes of a topic (see `icons.ts`). An empty list removes the icons. */
+    | {op: 'setIcons'; id: NodeId; icons: string[]};
 
 export type MapOpKind = MapOp['op'];
 
@@ -103,6 +106,12 @@ export function applyOp(tree: MindMapTree, op: MapOp): MindMapTree {
             const {note: _drop, ...rest} = node;
             return {...tree, nodes: {...nodes, [op.id]: op.note ? {...rest, note: op.note} : rest}};
         }
+        case 'setIcons': {
+            const node = nodes[op.id];
+            if (!node || sameIcons(node.icons, op.icons)) return tree;
+            const {icons: _drop, ...rest} = node;
+            return {...tree, nodes: {...nodes, [op.id]: op.icons.length ? {...rest, icons: [...op.icons]} : rest}};
+        }
     }
 }
 
@@ -129,7 +138,7 @@ export function applyOps(tree: MindMapTree, ops: readonly MapOp[]): ApplyResult 
  * Both trees MUST share the root id.
  *
  * Order: adds and moves in pre-order of `to` (so a parent is in its final place before its children arrive and a
- * move can never create a cycle), then text, collapse and note changes, then removals of what is left over.
+ * move can never create a cycle), then text, collapse, note and icon changes, then removals of what is left over.
  * A child is moved only when its order relative to the siblings that stay under the same parent changes, so a topic
  * that leaves a parent causes exactly one `move` and no reordering of the siblings it leaves behind.
  */
@@ -170,6 +179,7 @@ export function diffTrees(from: MindMapTree, to: MindMapTree): MapOp[] {
         if (a.text !== b.text) push({op: 'setText', id, text: b.text});
         if (!!a.collapsed !== !!b.collapsed) push({op: 'setCollapsed', id, collapsed: !!b.collapsed});
         if ((a.note ?? '') !== (b.note ?? '')) push({op: 'setNote', id, note: b.note ?? ''});
+        if (!sameIcons(a.icons, b.icons)) push({op: 'setIcons', id, icons: [...(b.icons ?? [])]});
     }
 
     for (const id of Object.keys(from.nodes)) {
@@ -192,6 +202,8 @@ export function outlineToOps(
         if (top) ids.push(id);
         ops.push({op: 'add', id, parentId: parent, index: at, text: o.text});
         if (o.note) ops.push({op: 'setNote', id, note: o.note});
+        const icons = normalizeIcons(o.icons ?? []);
+        if (icons.length) ops.push({op: 'setIcons', id, icons});
         (o.children ?? []).forEach((c, i) => visit(c, id, i, false));
         if (o.collapsed && o.children?.length) ops.push({op: 'setCollapsed', id, collapsed: true});
     };

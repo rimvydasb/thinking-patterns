@@ -67,6 +67,7 @@ describe('MCP tools', () => {
             'get_selection',
             'get_topic',
             'group_topics',
+            'list_icons',
             'move_topic',
             'replace_map',
             'search_topics',

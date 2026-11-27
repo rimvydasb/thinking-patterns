@@ -2,6 +2,7 @@ import type {Heading, List, ListItem, Root, RootContent} from 'mdast';
 import remarkFrontmatter from 'remark-frontmatter';
 import remarkParse from 'remark-parse';
 import {unified} from 'unified';
+import {splitLeadingIcons} from '../icons';
 import {findByName, findByPath, normalize} from '../topicPath';
 import {newId} from '../tree';
 import type {MindMapTree, MindNode, NodeId} from '../types';
@@ -33,6 +34,20 @@ export function parseMapFile(input: string): ParseResult {
     diagnostics.sort((a, b) => a.line - b.line);
     if (!model || diagnostics.some((d) => d.severity === 'error')) return {ok: false, diagnostics};
     return {ok: true, model, diagnostics};
+}
+
+/** Shown when a Markdown file has no `mindmap: 1` frontmatter flag. */
+export const NOT_A_MIND_MAP = 'This is not a mind map file: it has no "mindmap: 1" flag in its frontmatter.';
+
+/**
+ * True if the text starts with frontmatter that holds the `mindmap: 1` flag. Only such Markdown files are mind map
+ * files; any other Markdown file is refused before parsing. A mind map file without a `# Map` section is a parse
+ * error (`parseMapFile`).
+ */
+export function isMindMapFile(input: string): boolean {
+    const text = input.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+    const front = /^---\n([\s\S]*?)\n---[ \t]*(?:\n|$)/.exec(text);
+    return !!front && /^mindmap:[ \t]*1[ \t]*$/m.test(front[1]);
 }
 
 const CONFLICT = /^(?:<{7}|>{7})(?:\s|$)|^(?:={7}|\|{7})(?:\s|$)/;
@@ -170,13 +185,13 @@ class Reader {
             );
             return null;
         }
-        const text = first ? this.topicText(first) : '';
+        const {icons, text} = first ? this.topicText(first) : {icons: [], text: ''};
         if (!text) {
             this.error(lineOf(item), 'Empty topic. Write the topic text after the bullet.');
             return null;
         }
         const id = newId();
-        const node: MindNode = {id, text, parentId, children: []};
+        const node: MindNode = {id, text, parentId, children: [], ...(icons.length ? {icons} : {})};
         this.nodes[id] = node;
         for (const list of rest as List[]) {
             for (const child of list.children) {
@@ -188,13 +203,20 @@ class Reader {
         return id;
     }
 
-    /** Paragraph source with the continuation indentation and the serializer's escapes removed. */
-    private topicText(paragraph: {children: RootContent[]}): string {
-        return this.inlineText(paragraph)
-            .split('\n')
-            .map((l) => unescapeTopicLine(l.trim()))
-            .filter((l) => l)
-            .join('\n');
+    /**
+     * Paragraph source with the leading icon tokens split off, and the continuation indentation and the
+     * serializer's escapes removed.
+     */
+    private topicText(paragraph: {children: RootContent[]}): {icons: string[]; text: string} {
+        const [first = '', ...rest] = this.inlineText(paragraph).split('\n');
+        const {icons, text} = splitLeadingIcons(first.trim());
+        return {
+            icons,
+            text: [text, ...rest]
+                .map((l) => unescapeTopicLine(l.trim()))
+                .filter((l) => l)
+                .join('\n'),
+        };
     }
 
     private readNotes(section: Section): PendingNote[] {
